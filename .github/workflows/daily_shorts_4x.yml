@@ -1,0 +1,77 @@
+name: History Unsealed — 4x Daily V15 Shorts
+
+on:
+  schedule:
+    # 4 US Prime Time slots every day, staggered 30 min from Channel 1 (07:30, 11:30, 15:30, 19:30 US EST)
+    - cron: '30 12,16,20,0 * * *'
+  workflow_dispatch:
+    inputs:
+      month:
+        description: 'Optional month override (1-12, 0 = today UTC)'
+        required: false
+        default: '0'
+      day:
+        description: 'Optional day override (1-31, 0 = today UTC)'
+        required: false
+        default: '0'
+      dry_run:
+        description: 'Dry run only (render without uploading to YouTube)'
+        required: false
+        default: 'false'
+      privacy:
+        description: 'YouTube privacy (public, unlisted, private)'
+        required: false
+        default: 'public'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: history-unsealed-v15-shorts
+  cancel-in-progress: false
+
+jobs:
+  publish-v15-short:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install system FFmpeg & Python dependencies
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
+          pip install -q --upgrade pip
+          pip install -q -r requirements.txt
+
+      - name: Produce & Upload V15 BEAST Short (9:16)
+        env:
+          YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+          YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+          YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+          PRIVACY_STATUS: ${{ github.event.inputs.privacy || 'public' }}
+        run: |
+          python3 run_daily_v15.py --month "${{ github.event.inputs.month || '0' }}" --day "${{ github.event.inputs.day || '0' }}"
+
+      - name: Save updated state (prevents duplicate events across 4 daily slots)
+        if: ${{ (github.event.inputs.dry_run || 'false') != 'true' }}
+        run: |
+          git config user.name "V15 Beast Autopilot"
+          git config user.email "autopilot@historyunsealed.local"
+          git add state/
+          if ! git diff --staged --quiet; then
+            git commit -m "chore(history-unsealed): log published V15 Short [skip ci]"
+            git pull --rebase origin main || git pull --rebase origin master || true
+            git push
+          fi
