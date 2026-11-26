@@ -24,12 +24,17 @@ def send_telegram(text):
 def get_google_creds(scopes):
     from google.oauth2.credentials import Credentials
     from google.auth.transport.requests import Request
+    refresh_token = (os.environ.get("YOUTUBE_REFRESH_TOKEN") or os.environ.get("GOOGLE_REFRESH_TOKEN") or "").strip()
+    client_id = (os.environ.get("YOUTUBE_CLIENT_ID") or os.environ.get("GOOGLE_CLIENT_ID") or "").strip()
+    client_secret = (os.environ.get("YOUTUBE_CLIENT_SECRET") or os.environ.get("GOOGLE_CLIENT_SECRET") or "").strip()
+    if not (refresh_token and client_id and client_secret):
+        raise RuntimeError("Missing YouTube OAuth secrets! Set YOUTUBE_CLIENT_ID, YOUTUBE_CLIENT_SECRET, YOUTUBE_REFRESH_TOKEN.")
     creds = Credentials(
         token=None,
-        refresh_token=os.environ["GOOGLE_REFRESH_TOKEN"].strip(),
+        refresh_token=refresh_token,
         token_uri="https://oauth2.googleapis.com/token",
-        client_id=os.environ["GOOGLE_CLIENT_ID"].strip(),
-        client_secret=os.environ["GOOGLE_CLIENT_SECRET"].strip(),
+        client_id=client_id,
+        client_secret=client_secret,
         scopes=scopes,
     )
     creds.refresh(Request())
