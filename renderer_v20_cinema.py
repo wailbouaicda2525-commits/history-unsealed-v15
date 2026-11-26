@@ -1111,109 +1111,204 @@ def pick_best_thumb_photos(img_paths):
     return best_left, best_right
 
 
+def _frame_subject_right(img_path, W, H):
+    """Load real archival photo, enhance documentary clarity, and place detected face/subject cleanly at right ~68%."""
+    im = cv2.imread(img_path)
+    if im is None:
+        return np.full((H, W, 3), (20, 22, 28), dtype=np.uint8)
+    ih, iw = im.shape[:2]
+    cx_norm, cy_norm = 0.50, 0.38
+    try:
+        gray = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
+        casc_p = os.path.join(cv2.data.haarcascades, "haarcascade_frontalface_default.xml")
+        if os.path.exists(casc_p):
+            faces = cv2.CascadeClassifier(casc_p).detectMultiScale(gray, 1.12, 4, minSize=(36, 36))
+            if len(faces) > 0:
+                fx, fy, fw, fh = sorted(faces, key=lambda f: f[2] * f[3], reverse=True)[0]
+                cx_norm = (fx + fw * 0.50) / float(iw)
+                cy_norm = (fy + fh * 0.44) / float(ih)
+    except Exception:
+        pass
+
+    sc = max(W / float(iw), H / float(ih)) * 1.12
+    nw, nh = max(W, int(round(iw * sc))), max(H, int(round(ih * sc)))
+    rs = cv2.resize(im, (nw, nh), interpolation=cv2.INTER_LANCZOS4)
+
+    # Place subject's face/focal center cleanly on the right side (x ~ 0.68*W) so left typography stays spotless!
+    target_x = int(cx_norm * nw - W * 0.68)
+    target_y = int(cy_norm * nh - H * 0.44)
+    # If photo doesn't have enough left margin to shift subject to 68%, pad gracefully with dark edge mirror
+    if target_x < 0:
+        pad_l = min(int(W * 0.28), -target_x)
+        rs = cv2.copyMakeBorder(rs, 0, 0, pad_l, 0, cv2.BORDER_REPLICATE)
+        nw = rs.shape[1]
+        target_x = max(0, target_x + pad_l)
+    x0 = max(0, min(nw - W, target_x))
+    y0 = max(0, min(nh - H, target_y))
+    crop = rs[y0:y0 + H, x0:x0 + W]
+
+    # CLAHE micro-detail + unsharp clarity
+    lab = cv2.cvtColor(crop, cv2.COLOR_BGR2LAB)
+    l_ch, a_ch, b_ch = cv2.split(lab)
+    l_ch = cv2.createCLAHE(clipLimit=2.1, tileGridSize=(8, 8)).apply(l_ch)
+    crop = cv2.cvtColor(cv2.merge([l_ch, a_ch, b_ch]), cv2.COLOR_LAB2BGR)
+    blur = cv2.GaussianBlur(crop, (0, 0), 1.3)
+    return cv2.addWeighted(crop, 1.28, blur, -0.28, 0)
+
+
+def _split_headline_lines(w_txt, r_txt):
+    """Split headline cleanly into (top_line_1, top_line_2, highlight_line_3) for maximum mobile readability."""
+    w_words = [w for w in str(w_txt or "").strip().upper().split() if w]
+    r_str = str(r_txt or "").strip().upper()
+    if not w_words and not r_str:
+        return "THE SECRET", "ARCHIVE", "DECLASSIFIED"
+    if len(w_words) <= 2:
+        l1 = " ".join(w_words)
+        l2 = ""
+    else:
+        mid = max(1, len(w_words) // 2)
+        l1 = " ".join(w_words[:mid])
+        l2 = " ".join(w_words[mid:])
+    return l1, l2, r_str
+
+
 def generate_v20_thumbnail(hero_img_path, second_img_path, brand, headline_white, headline_red, stamp_badge, out_jpg,
                            center_pill=None):
     """
-    🔥 V20.5 VIRAL SPLIT-SCREEN REAL-ARCHIVAL THUMBNAIL (1280x720)!
-    Inspired by top-performing 2026 history channels — 100% REAL ARCHIVAL PHOTOGRAPHS:
-      - Dramatic Left vs Right real archival photos split by a glowing crimson diagonal slash!
-      - Massive full-width top headline: PURE WHITE + BLOOD-RED KEYWORD with heavy black stroke!
-      - Angled red archival rubber-stamp box ('CIA ARCHIVE 1974', '1968 -> 1974', 'DECLASSIFIED')!
+    🔥 V20.6 ORIGINAL SIGNATURE BRAND THUMBNAIL ENGINE (1280x720)!
+    Automatically renders each channel's bespoke, 100% original visual identity:
+      - BEHIND THE CURTAIN -> OPTION A: 'CLASSIFIED FILE RIP'
+          (Torn black classified dossier + real archival photo + yellow highlighter bar + crimson TOP SECRET stamp)
+      - HISTORY UNSEALED   -> OPTION D: 'NETFLIX CINEMA POSTER'
+          (Full-bleed movie-poster real archival hero + obsidian sweep + vertical gold bar + luxury white/gold title)
     """
     W, H = 1280, 720
-    img1 = hero_img_path
-    img2 = second_img_path if (second_img_path and os.path.exists(second_img_path) and second_img_path != hero_img_path) else hero_img_path
+    is_btc = ("BEHIND" in str(brand or "").upper()) or ("CURTAIN" in str(brand or "").upper())
+    l1, l2, l3 = _split_headline_lines(headline_white, headline_red)
+    yr_tag = str(center_pill or stamp_badge or "").replace("->", "–").strip().upper()[:18]
+    if not yr_tag:
+        yr_tag = "ARCHIVE"
 
-    left_p = _smart_subject_crop(img1, W, H, is_right=False)
-    right_p = _smart_subject_crop(img2, W, H, is_right=True)
+    bg = _frame_subject_right(hero_img_path, W, H)
 
-    # Diagonal split line (tilted dynamically like viral cinema thumbnails: top x=695 -> bottom x=575)
-    ys, xs = np.mgrid[0:H, 0:W]
-    x_line = 695.0 - (120.0 / float(H)) * ys
-    mask_right = xs > x_line
-    canvas = np.where(mask_right[:, :, None], right_p, left_p)
+    if is_btc:
+        # =====================================================================
+        # CHANNEL 1: BEHIND THE CURTAIN — OPTION A ('CLASSIFIED FILE RIP')
+        # =====================================================================
+        bg = cv2.convertScaleAbs(bg, alpha=1.10, beta=-6)
+        ys, xs = np.mgrid[0:H, 0:W].astype(np.float32)
+        seed_v = sum(ord(c) for c in f"{l1}{l3}") + 1974
+        rng = np.random.default_rng(seed_v)
+        jag = np.cumsum(rng.normal(0, 2.7, H))
+        jag = jag - np.linspace(jag[0], jag[-1], H)
+        y1d = np.arange(H, dtype=np.float32)
+        tear_x = (635.0 - 0.08 * y1d + jag * 2.2)[:, None]
 
-    # Top dark vignette gradient so massive top text pops with 1000% legibility on mobile!
-    top_grad = np.clip(1.0 - (ys / 235.0), 0.0, 1.0) ** 1.35
-    bot_grad = np.clip((ys - (H - 190)) / 190.0, 0.0, 1.0) ** 1.5
-    vig_f = 1.0 - 0.62 * top_grad - 0.42 * bot_grad
-    canvas = np.clip(canvas.astype(np.float32) * vig_f[:, :, None], 0, 255).astype(np.uint8)
+        mask_paper = xs < tear_x
+        mask_edge = (xs >= tear_x) & (xs < (tear_x + 15.0))
+        mask_sh = (xs >= (tear_x + 13.0)) & (xs < (tear_x + 48.0))
 
-    # Subtle edge vignette
-    Yg, Xg = np.ogrid[:H, :W]
-    Rn = np.sqrt(((Xg - W / 2.0) / (W * 0.62)) ** 2 + ((Yg - H / 2.0) / (H * 0.62)) ** 2)
-    edge_v = np.clip(1.0 - 0.38 * (np.clip(Rn - 0.48, 0, 1.5) ** 1.8), 0.48, 1.0)
-    canvas = np.clip(canvas.astype(np.float32) * edge_v[:, :, None], 0, 255).astype(np.uint8)
+        dossier_bg = np.full((H, W, 3), (20, 18, 15), dtype=np.uint8)
+        noise = rng.normal(0, 4.2, (H, W, 1))
+        dossier_bg = np.clip(dossier_bg.astype(np.float32) + noise, 0, 255).astype(np.uint8)
+        for gx in range(40, 680, 48):
+            cv2.line(dossier_bg, (gx, 0), (gx, H), (33, 29, 25), 1)
+        for gy in range(40, H, 48):
+            cv2.line(dossier_bg, (0, gy), (680, gy), (33, 29, 25), 1)
 
-    # Glowing Crimson Diagonal Slash separating Left & Right archival scenes!
-    pt1, pt2 = (695, 0), (575, H)
-    cv2.line(canvas, pt1, pt2, (8, 8, 12), 20, cv2.LINE_AA)      # crisp black outer border
-    cv2.line(canvas, pt1, pt2, (28, 22, 232), 11, cv2.LINE_AA)    # blazing crimson slash
-    cv2.line(canvas, pt1, pt2, (72, 76, 255), 3, cv2.LINE_AA)     # hot inner highlight
+        canvas = np.where(mask_paper[:, :, None], dossier_bg, bg)
+        canvas = np.where(mask_sh[:, :, None], (canvas.astype(np.float32) * 0.45).astype(np.uint8), canvas)
+        canvas = np.where(mask_edge[:, :, None], np.array([192, 214, 232], dtype=np.uint8), canvas)
 
-    im = Image.fromarray(cv2.cvtColor(canvas, cv2.COLOR_BGR2RGB)).convert("RGBA")
-    dr = ImageDraw.Draw(im)
+        im = Image.fromarray(cv2.cvtColor(canvas, cv2.COLOR_BGR2RGB)).convert("RGBA")
+        dr = ImageDraw.Draw(im)
 
-    # MASSIVE FULL-WIDTH TOP HEADLINE (White prefix + Blood-Red power keyword, auto-fit to 1210px!)
-    w_txt = str(headline_white or "").strip().upper()
-    r_txt = str(headline_red or "").strip().upper()
-    full_txt = (w_txt + (" " if w_txt and r_txt else "") + r_txt).strip() or "DECLASSIFIED"
+        eyebrow = f"FILE #{yr_tag}  •  DECLASSIFIED"[:34]
+        dr.text((52, 62), eyebrow, font=load_font(FONT_MONO, 23, 700), fill=(242, 198, 72, 255))
+        dr.rectangle([52, 98, 510, 102], fill=(242, 198, 72, 200))
 
-    f_sz = 136
-    f_top = load_font(FONT_SANS, f_sz, 800)
-    while f_sz >= 68:
-        f_top = load_font(FONT_SANS, f_sz, 800)
-        if dr.textlength(full_txt, font=f_top) <= 1205:
-            break
-        f_sz -= 4
+        # Auto-fit white stacked lines within 535px left dossier panel
+        max_lw = 530
+        white_lines = [s for s in (l1, l2) if s]
+        y_cur = 148 if len(white_lines) == 2 else 196
+        for wl in white_lines:
+            fsz = 104
+            f_use = load_font(FONT_SANS, fsz, 800)
+            while fsz >= 56 and dr.textlength(wl, font=f_use) > max_lw:
+                fsz -= 4
+                f_use = load_font(FONT_SANS, fsz, 800)
+            dr.text((50, y_cur), wl, font=f_use, fill=(255, 255, 255, 255))
+            y_cur += int(fsz * 1.12)
 
-    total_w = dr.textlength(full_txt, font=f_top)
-    x_start = (W - total_w) / 2.0
-    y_top = 86
+        # Signature Johnny Harris YELLOW HIGHLIGHTER BAR behind the shocking power keyword!
+        hl_txt = l3 or "DECLASSIFIED"
+        fsz_h = 84
+        f_hl = load_font(FONT_SANS, fsz_h, 800)
+        while fsz_h >= 46 and dr.textlength(hl_txt, font=f_hl) > 515:
+            fsz_h -= 4
+            f_hl = load_font(FONT_SANS, fsz_h, 800)
+        hl_w = int(dr.textlength(hl_txt, font=f_hl))
+        hl_y = max(y_cur + 10, 386)
+        hl_h = int(fsz_h * 1.24)
+        dr.rounded_rectangle([40, hl_y, 40 + hl_w + 34, hl_y + hl_h], radius=6, fill=(246, 202, 46, 255))
+        dr.text((57, hl_y + hl_h // 2), hl_txt, font=f_hl, fill=(12, 12, 16, 255), anchor="lm")
 
-    # Deep drop shadow + heavy crisp black stroke (exact high-CTR YouTube style!)
-    stroke_w = max(8, int(f_sz * 0.085))
-    cur_x = x_start
-    for part_txt, fill_col in [(w_txt, (255, 255, 255, 255)), (r_txt, (242, 24, 24, 255))]:
-        if not part_txt:
-            continue
-        draw_str = part_txt + (" " if (part_txt == w_txt and r_txt) else "")
-        # Offset hard black shadow
-        dr.text((cur_x + 6, y_top + 8), draw_str, font=f_top, fill=(0, 0, 0, 235), anchor="lm", stroke_width=stroke_w + 3, stroke_fill=(0, 0, 0, 245))
-        # Main text with thick black outline
-        dr.text((cur_x, y_top), draw_str, font=f_top, fill=fill_col, anchor="lm", stroke_width=stroke_w, stroke_fill=(8, 8, 12, 255))
-        cur_x += dr.textlength(draw_str, font=f_top)
+        # Translucent Crimson Rubber Stamp ('TOP SECRET' / custom stamp_badge)
+        st_txt = str(stamp_badge or "TOP SECRET").strip().upper()[:16]
+        f_st = load_font(FONT_MONO, 36, 700)
+        stw = max(290, int(dr.textlength(st_txt, font=f_st)) + 68)
+        st = Image.new("RGBA", (stw, 94), (0, 0, 0, 0))
+        sdr = ImageDraw.Draw(st)
+        sdr.rectangle([8, 8, stw - 8, 86], outline=(228, 42, 46, 232), width=5)
+        sdr.rectangle([16, 16, stw - 16, 78], outline=(228, 42, 46, 160), width=2)
+        sdr.text((stw // 2, 47), st_txt, font=f_st, fill=(228, 42, 46, 238), anchor="mm")
+        st = st.rotate(6, expand=True, resample=Image.BICUBIC)
+        im.alpha_composite(st, (44, H - st.height - 26))
 
-    # OPTIONAL CENTER DATE-TRANSITION PILL (like '1947 → 1955' / '1968 → 1974' across the slash!)
-    if center_pill:
-        cp_txt = str(center_pill).replace("->", "→").upper()[:20]
-        f_cp = load_font(FONT_SANS, 46, 800)
-        cpw = int(dr.textlength(cp_txt, font=f_cp)) + 56
-        cph = 76
-        cp_im = Image.new("RGBA", (cpw + 24, cph + 24), (0, 0, 0, 0))
-        cdr = ImageDraw.Draw(cp_im)
-        cdr.rounded_rectangle([12, 12, cpw + 12, cph + 12], radius=8, fill=(196, 20, 26, 248), outline=(255, 255, 255, 250), width=4)
-        cdr.text((cpw // 2 + 12, cph // 2 + 12), cp_txt, font=f_cp, fill=(255, 255, 255, 255), anchor="mm")
-        cp_rot = cp_im.rotate(7, expand=True, resample=Image.BICUBIC)
-        im.alpha_composite(cp_rot, (W // 2 - cp_rot.width // 2 - 12, int(H * 0.56) - cp_rot.height // 2))
+    else:
+        # =====================================================================
+        # CHANNEL 2: HISTORY UNSEALED — OPTION D ('NETFLIX CINEMA POSTER')
+        # =====================================================================
+        # Warm dramatic movie-poster color grade (rich golden highlights + deep obsidian shadows)
+        bg_f = bg.astype(np.float32)
+        bg_f[:, :, 2] = np.clip(bg_f[:, :, 2] * 1.11, 0, 255)
+        bg_f[:, :, 0] = np.clip(bg_f[:, :, 0] * 0.90, 0, 255)
+        bg = bg_f.astype(np.uint8)
 
-    # TILTED RED ARCHIVAL STAMP BADGE (bottom-left — exact 'GERMAN SIDE' / 'CIA ARCHIVE' look!)
-    st_txt = str(stamp_badge or brand).strip().upper()[:22]
-    f_st = load_font(FONT_SANS, 44, 800)
-    stw = int(dr.textlength(st_txt, font=f_st)) + 54
-    sth = 76
-    st_im = Image.new("RGBA", (stw + 28, sth + 28), (0, 0, 0, 0))
-    sdr = ImageDraw.Draw(st_im)
-    # Dark outer shadow + crimson fill + double white inner stamp frame
-    sdr.rounded_rectangle([16, 18, stw + 16, sth + 18], radius=6, fill=(0, 0, 0, 200))
-    sdr.rounded_rectangle([12, 12, stw + 12, sth + 12], radius=6, fill=(188, 18, 24, 246), outline=(252, 248, 244, 250), width=4)
-    sdr.rounded_rectangle([19, 19, stw + 5, sth + 5], radius=4, outline=(255, 210, 210, 140), width=2)
-    sdr.text((stw // 2 + 12, sth // 2 + 12), st_txt, font=f_st, fill=(255, 252, 248, 255), anchor="mm")
-    st_rot = st_im.rotate(7, expand=True, resample=Image.BICUBIC)
-    im.alpha_composite(st_rot, (28, H - st_rot.height - 20))
+        ys, xs = np.mgrid[0:H, 0:W].astype(np.float32)
+        grad_l = np.clip(1.0 - xs / 790.0, 0.0, 1.0) ** 1.32
+        grad_b = np.clip((ys - 430.0) / 290.0, 0.0, 1.0) ** 1.4
+        shade = np.clip(1.0 - 0.88 * grad_l - 0.54 * grad_b, 0.08, 1.0)
+        canvas = np.clip(bg.astype(np.float32) * shade[:, :, None], 0, 255).astype(np.uint8)
+        canvas = add_anamorphic_flare(canvas, 172, 920, intensity=0.38, color_bgr=(52, 168, 246))
+
+        im = Image.fromarray(cv2.cvtColor(canvas, cv2.COLOR_BGR2RGB)).convert("RGBA")
+        dr = ImageDraw.Draw(im)
+
+        # Signature sleek vertical gold documentary accent bar + eyebrow
+        dr.rectangle([62, 146, 74, 560], fill=(244, 194, 62, 255))
+        eyebrow = f"HISTORY UNSEALED  •  {yr_tag}"[:34]
+        dr.text((100, 148), eyebrow, font=load_font(FONT_MONO, 24, 700), fill=(244, 194, 62, 255))
+
+        # Auto-fit 3-line massive movie-poster typography (PURE WHITE top lines + WARM GOLD climax line!)
+        poster_lines = [(s, (255, 255, 255, 255)) for s in (l1, l2) if s]
+        if l3:
+            poster_lines.append((l3, (248, 202, 64, 255)))
+        y_cur = 204 if len(poster_lines) >= 3 else 248
+        for txt_ln, col_ln in poster_lines:
+            fsz = 110
+            f_use = load_font(FONT_SANS, fsz, 800)
+            while fsz >= 58 and dr.textlength(txt_ln, font=f_use) > 740:
+                fsz -= 4
+                f_use = load_font(FONT_SANS, fsz, 800)
+            dr.text((96, y_cur), txt_ln, font=f_use, fill=col_ln, stroke_width=4, stroke_fill=(0, 0, 0, 195))
+            y_cur += int(fsz * 1.10)
+
+        dr.text((62, 638), "FULL ARCHIVAL DOCUMENTARY  •  REAL FOOTAGE", font=load_font(FONT_MONO, 22, 700), fill=(214, 220, 232, 225))
 
     im.convert("RGB").save(out_jpg, "JPEG", quality=94, optimize=True)
-    print(f"[V20.5 VIRAL SPLIT THUMB OK] {out_jpg} ({os.path.getsize(out_jpg)/1024:.1f} KB)")
+    style_lbl = "OPTION-A CLASSIFIED-RIP" if is_btc else "OPTION-D NETFLIX-POSTER"
+    print(f"[V20.6 {style_lbl} THUMB OK] {out_jpg} ({os.path.getsize(out_jpg)/1024:.1f} KB)")
     return out_jpg
 
 
