@@ -1,5 +1,6 @@
 """
 uploader_v15.py — Zero-Touch YouTube Data API v3 Uploader + Thumbnail Setter + Telegram Alert
+Also supports checking Google Drive '01 — READY TO PUBLISH' queue for flagship Behind The Curtain episodes!
 """
 import os
 import json
