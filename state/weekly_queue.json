@@ -1,1 +1,44 @@
-[]
+[
+  {
+    "mode": "daily_archive",
+    "id": "1986:iran_contra_affair_u_s_president_ronald_reagan",
+    "month": 11,
+    "day": 26,
+    "year": 1986,
+    "topic_hint": "Iran\u2013Contra affair: U.S. President Ronald Reagan announces the members of what will become known as the Tower Commission.",
+    "date_label": "NOVEMBER 26, 1986",
+    "location": "WARSAW, POLAND",
+    "title": "November 26, 1986: Iran\u2013Contra affair: U.S. President Ronald",
+    "script": {
+      "title": "November 26, 1986: Iran\u2013Contra affair: U.S. President Ronald",
+      "newspaper_headline": "IRAN\u2013CONTRA AFFAIR: U.S. PRESIDENT RONALD",
+      "thumb_hook": "SECRET OF 1986",
+      "narration": "November 26, 1986. In a single afternoon, history changed forever. Iran\u2013Contra affair: U.S. President Ronald Reagan announces the members of what will become known as the Tower Commission. The administration hoped to use the proceeds of the arms sale to fund the Contras, an anti-Sandinista rebel group in Nicaragua. Ronald Wilson Reagan was an American politician and actor who served as the 40th president of the United States from 1981 to 1989. Investigators, witnesses, and historians still study what unfolded at Warsaw, Poland decades later. Follow History Unsealed for tomorrow's unbelievable true story.",
+      "polaroid_caption": "FILE #1986-1126 \u2022 WARSAW, POLAND",
+      "stamp_line1": "DECLASSIFIED",
+      "stamp_line2": "NOVEMBER 26, 1986",
+      "forensic_header": "ARCHIVE DOSSIER \u2022 NOVEMBER 26, 1986",
+      "forensic_lines": [
+        "DATE: NOVEMBER 26, 1986",
+        "SECTOR: WARSAW, POLAND",
+        "RECORD: IRAN\u2013CONTRA AFFAIR: U.S. PRESIDENT RONALD"
+      ],
+      "split_left_label": "ARCHIVAL PLATE A",
+      "split_right_label": "DECLASSIFIED PLATE B",
+      "climax_stat_label": "VERIFIED RECORD \u2022 1986",
+      "climax_stat_big": "1986",
+      "climax_stat_sub": "LOCATION: WARSAW, POLAND",
+      "tags": [
+        "history",
+        "us history",
+        "history documentary",
+        "cold war",
+        "declassified",
+        "secret history",
+        "on this day",
+        "1986"
+      ],
+      "provider": "v15-deterministic-fallback"
+    }
+  }
+]
