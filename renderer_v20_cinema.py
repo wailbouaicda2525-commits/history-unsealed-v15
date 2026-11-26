@@ -1112,12 +1112,25 @@ def pick_best_thumb_photos(img_paths):
 
 
 def _frame_subject_right(img_path, W, H):
-    """Load real archival photo, enhance documentary clarity, and place detected face/subject cleanly at right ~68%."""
+    """Load real archival photo, strip museum caption bars, enhance clarity, and frame face/subject cleanly at right."""
     im = cv2.imread(img_path)
     if im is None:
         return np.full((H, W, 3), (20, 22, 28), dtype=np.uint8)
     ih, iw = im.shape[:2]
-    cx_norm, cy_norm = 0.50, 0.38
+
+    # Auto-trim white museum/Bundesarchiv bottom caption strips if present
+    cut_y = ih
+    for yy in range(ih - 1, max(1, int(ih * 0.86)), -1):
+        if float(im[yy].mean()) > 235.0:
+            cut_y = yy
+        else:
+            break
+    if cut_y < ih - 4:
+        im = im[:max(100, cut_y - 4), :]
+        ih, iw = im.shape[:2]
+
+    cx_norm, cy_norm = 0.50, (0.28 if ih > iw else 0.36)
+    has_face = False
     try:
         gray = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
         casc_p = os.path.join(cv2.data.haarcascades, "haarcascade_frontalface_default.xml")
@@ -1127,25 +1140,47 @@ def _frame_subject_right(img_path, W, H):
                 fx, fy, fw, fh = sorted(faces, key=lambda f: f[2] * f[3], reverse=True)[0]
                 cx_norm = (fx + fw * 0.50) / float(iw)
                 cy_norm = (fy + fh * 0.44) / float(ih)
+                has_face = True
     except Exception:
         pass
 
-    sc = max(W / float(iw), H / float(ih)) * 1.12
-    nw, nh = max(W, int(round(iw * sc))), max(H, int(round(ih * sc)))
-    rs = cv2.resize(im, (nw, nh), interpolation=cv2.INTER_LANCZOS4)
-
-    # Place subject's face/focal center cleanly on the right side (x ~ 0.68*W) so left typography stays spotless!
-    target_x = int(cx_norm * nw - W * 0.68)
-    target_y = int(cy_norm * nh - H * 0.44)
-    # If photo doesn't have enough left margin to shift subject to 68%, pad gracefully with dark edge mirror
-    if target_x < 0:
-        pad_l = min(int(W * 0.28), -target_x)
-        rs = cv2.copyMakeBorder(rs, 0, 0, pad_l, 0, cv2.BORDER_REPLICATE)
-        nw = rs.shape[1]
-        target_x = max(0, target_x + pad_l)
-    x0 = max(0, min(nw - W, target_x))
-    y0 = max(0, min(nh - H, target_y))
-    crop = rs[y0:y0 + H, x0:x0 + W]
+    # For tall portrait archival photos (e.g., 578x800 Bundesarchiv standing figure/tunnel),
+    # avoid 2.5x zoom that slices off heads/ceilings — fit height cleanly on right ~64% over obsidian backdrop!
+    if ih > iw * 1.05:
+        sc = (H / float(ih)) * 1.06
+        nw = max(int(W * 0.58), int(round(iw * sc)))
+        nh = max(H, int(round(ih * sc)))
+        rs = cv2.resize(im, (nw, nh), interpolation=cv2.INTER_LANCZOS4)
+        y0 = max(0, min(nh - H, int(cy_norm * nh - H * 0.36) if has_face else int((nh - H) * 0.14)))
+        if nw >= W:
+            x0 = max(0, min(nw - W, int(cx_norm * nw - W * 0.68)))
+            crop = rs[y0:y0 + H, x0:x0 + W]
+        else:
+            # Place crisp portrait cleanly on the right side & smoothly feather left edge into blurred dark backdrop
+            bg_fill = cv2.GaussianBlur(cv2.resize(im, (W, H), interpolation=cv2.INTER_AREA), (65, 65), 0)
+            bg_fill = np.clip(bg_fill.astype(np.float32) * 0.28, 0, 255).astype(np.uint8)
+            patch = rs[y0:y0 + H, :nw]
+            px0 = W - nw
+            feath = min(140, max(48, nw // 5))
+            alpha = np.ones((H, nw, 1), dtype=np.float32)
+            alpha[:, :feath, 0] = np.linspace(0.0, 1.0, feath, dtype=np.float32)[None, :]
+            roi = bg_fill[:, px0:W].astype(np.float32)
+            bg_fill[:, px0:W] = np.clip(patch.astype(np.float32) * alpha + roi * (1.0 - alpha), 0, 255).astype(np.uint8)
+            crop = bg_fill
+    else:
+        sc = max(W / float(iw), H / float(ih)) * 1.10
+        nw, nh = max(W, int(round(iw * sc))), max(H, int(round(ih * sc)))
+        rs = cv2.resize(im, (nw, nh), interpolation=cv2.INTER_LANCZOS4)
+        target_x = int(cx_norm * nw - W * 0.68)
+        target_y = int(cy_norm * nh - H * 0.44)
+        if target_x < 0:
+            pad_l = min(int(W * 0.28), -target_x)
+            rs = cv2.copyMakeBorder(rs, 0, 0, pad_l, 0, cv2.BORDER_REPLICATE)
+            nw = rs.shape[1]
+            target_x = max(0, target_x + pad_l)
+        x0 = max(0, min(nw - W, target_x))
+        y0 = max(0, min(nh - H, target_y))
+        crop = rs[y0:y0 + H, x0:x0 + W]
 
     # CLAHE micro-detail + unsharp clarity
     lab = cv2.cvtColor(crop, cv2.COLOR_BGR2LAB)
@@ -1157,7 +1192,7 @@ def _frame_subject_right(img_path, W, H):
 
 
 def _split_headline_lines(w_txt, r_txt):
-    """Split headline cleanly into (top_line_1, top_line_2, highlight_line_3) for maximum mobile readability."""
+    """Split headline cleanly by balanced character length into (top_line_1, top_line_2, highlight_line_3)."""
     w_words = [w for w in str(w_txt or "").strip().upper().split() if w]
     r_str = str(r_txt or "").strip().upper()
     if not w_words and not r_str:
@@ -1166,19 +1201,28 @@ def _split_headline_lines(w_txt, r_txt):
         l1 = " ".join(w_words)
         l2 = ""
     else:
-        mid = max(1, len(w_words) // 2)
-        l1 = " ".join(w_words[:mid])
-        l2 = " ".join(w_words[mid:])
+        best_i = 1
+        best_diff = 10**9
+        for i in range(1, len(w_words)):
+            a = " ".join(w_words[:i])
+            b = " ".join(w_words[i:])
+            # Slight preference for putting extra word on top line when tied (reads like 'ONE MAN / STOPPED')
+            diff = abs(len(a) - len(b)) - (0.5 if len(a) >= len(b) else 0.0)
+            if diff < best_diff:
+                best_diff = diff
+                best_i = i
+        l1 = " ".join(w_words[:best_i])
+        l2 = " ".join(w_words[best_i:])
     return l1, l2, r_str
 
 
 def generate_v20_thumbnail(hero_img_path, second_img_path, brand, headline_white, headline_red, stamp_badge, out_jpg,
                            center_pill=None):
     """
-    🔥 V20.6 ORIGINAL SIGNATURE BRAND THUMBNAIL ENGINE (1280x720)!
+    🔥 V20.7 ORIGINAL SIGNATURE BRAND THUMBNAIL ENGINE (1280x720)!
     Automatically renders each channel's bespoke, 100% original visual identity:
-      - BEHIND THE CURTAIN -> OPTION A: 'CLASSIFIED FILE RIP'
-          (Torn black classified dossier + real archival photo + yellow highlighter bar + crimson TOP SECRET stamp)
+      - BEHIND THE CURTAIN -> BEHANCE #1: 'A24 / SWISS REDACT'
+          (Silver-gelatin monochrome portrait + Swiss hairline grid + vermilion redaction block + CIA black bar)
       - HISTORY UNSEALED   -> OPTION D: 'NETFLIX CINEMA POSTER'
           (Full-bleed movie-poster real archival hero + obsidian sweep + vertical gold bar + luxury white/gold title)
     """
@@ -1193,77 +1237,92 @@ def generate_v20_thumbnail(hero_img_path, second_img_path, brand, headline_white
 
     if is_btc:
         # =====================================================================
-        # CHANNEL 1: BEHIND THE CURTAIN — OPTION A ('CLASSIFIED FILE RIP')
+        # CHANNEL 1: BEHIND THE CURTAIN — BEHANCE #1 ('A24 / SWISS REDACT')
         # =====================================================================
-        bg = cv2.convertScaleAbs(bg, alpha=1.10, beta=-6)
-        ys, xs = np.mgrid[0:H, 0:W].astype(np.float32)
-        seed_v = sum(ord(c) for c in f"{l1}{l3}") + 1974
+        g = cv2.cvtColor(bg, cv2.COLOR_BGR2GRAY).astype(np.float32)
+        g = np.clip(((g / 255.0) ** 1.18) * 255.0, 0, 255)
+        g = np.clip((g - 115.0) * 1.28 + 112.0, 0, 255)
+        mono = cv2.merge([
+            np.clip(g * 0.96, 0, 255),
+            np.clip(g * 0.97, 0, 255),
+            np.clip(g * 1.00, 0, 255),
+        ]).astype(np.uint8)
+
+        # Smooth obsidian editorial sweep on left + subtle top/bottom edge vignette so micro-type pops over any photo
+        xs = np.linspace(0, 1, W, dtype=np.float32)[None, :, None]
+        ys = np.linspace(0, 1, H, dtype=np.float32)[:, None, None]
+        fade = np.clip(
+            1.0
+            - np.clip(1.0 - xs * 1.72, 0.0, 1.0) * 0.90
+            - np.clip((ys - 0.68) * 2.6, 0.0, 1.0) * 0.48
+            - np.clip((0.18 - ys) * 3.8, 0.0, 1.0) * 0.42,
+            0.08,
+            1.0,
+        )
+        canvas = np.clip(mono.astype(np.float32) * fade, 0, 255).astype(np.uint8)
+
+        # Authentic 35mm A24 silver-gelatin film grain
+        seed_v = sum(ord(c) for c in f"{l1}{l3}") + 1983
         rng = np.random.default_rng(seed_v)
-        jag = np.cumsum(rng.normal(0, 2.7, H))
-        jag = jag - np.linspace(jag[0], jag[-1], H)
-        y1d = np.arange(H, dtype=np.float32)
-        tear_x = (635.0 - 0.08 * y1d + jag * 2.2)[:, None]
-
-        mask_paper = xs < tear_x
-        mask_edge = (xs >= tear_x) & (xs < (tear_x + 15.0))
-        mask_sh = (xs >= (tear_x + 13.0)) & (xs < (tear_x + 48.0))
-
-        dossier_bg = np.full((H, W, 3), (20, 18, 15), dtype=np.uint8)
-        noise = rng.normal(0, 4.2, (H, W, 1))
-        dossier_bg = np.clip(dossier_bg.astype(np.float32) + noise, 0, 255).astype(np.uint8)
-        for gx in range(40, 680, 48):
-            cv2.line(dossier_bg, (gx, 0), (gx, H), (33, 29, 25), 1)
-        for gy in range(40, H, 48):
-            cv2.line(dossier_bg, (0, gy), (680, gy), (33, 29, 25), 1)
-
-        canvas = np.where(mask_paper[:, :, None], dossier_bg, bg)
-        canvas = np.where(mask_sh[:, :, None], (canvas.astype(np.float32) * 0.45).astype(np.uint8), canvas)
-        canvas = np.where(mask_edge[:, :, None], np.array([192, 214, 232], dtype=np.uint8), canvas)
+        grain = rng.normal(0, 6.2, (H, W, 1)).astype(np.float32)
+        canvas = np.clip(canvas.astype(np.float32) + grain, 0, 255).astype(np.uint8)
 
         im = Image.fromarray(cv2.cvtColor(canvas, cv2.COLOR_BGR2RGB)).convert("RGBA")
         dr = ImageDraw.Draw(im)
 
-        eyebrow = f"FILE #{yr_tag}  •  DECLASSIFIED"[:34]
-        dr.text((52, 62), eyebrow, font=load_font(FONT_MONO, 23, 700), fill=(242, 198, 72, 255))
-        dr.rectangle([52, 98, 510, 102], fill=(242, 198, 72, 200))
+        # Swiss Editorial Hairline Grid Framing (Behance signature!)
+        dr.line([(44, 44), (W - 44, 44)], fill=(255, 255, 255, 98), width=1)
+        dr.line([(44, H - 44), (W - 44, H - 44)], fill=(255, 255, 255, 98), width=1)
+        dr.line([(44, 44), (44, H - 44)], fill=(255, 255, 255, 74), width=1)
+        dr.line([(W - 44, 44), (W - 44, H - 44)], fill=(255, 255, 255, 74), width=1)
 
-        # Auto-fit white stacked lines within 535px left dossier panel
-        max_lw = 530
+        # Swiss micro-typography header + vermilion square indicator (dark obsidian micro-pill on top-right so it pops over bright skies!)
+        dr.text((64, 62), "BEHIND THE CURTAIN", font=load_font(FONT_MONO, 19, 700), fill=(242, 242, 242, 238))
+        f_tr = load_font(FONT_MONO, 18, 700)
+        tr_txt = f"FILE NO. {yr_tag[:12]}  //  DECLASSIFIED"
+        tr_w = int(dr.textlength(tr_txt, font=f_tr))
+        dr.rectangle([W - 64 - tr_w - 20, 56, W - 56, 86], fill=(10, 11, 14, 178))
+        dr.text((W - 66, 71), tr_txt, font=f_tr, fill=(246, 246, 246, 242), anchor="rm")
+        st_lbl = str(stamp_badge or "DECLASSIFIED").strip().upper()[:18]
+        dr.rectangle([64, 102, 82, 120], fill=(230, 34, 38, 255))
+        dr.text((96, 100), f"EYES ONLY  •  {st_lbl}"[:32], font=load_font(FONT_MONO, 18, 700), fill=(242, 54, 58, 250))
+
+        # Auto-fit bone-white ultra-tight editorial stack on left with subtle editorial shadow
+        max_lw = 575
         white_lines = [s for s in (l1, l2) if s]
-        y_cur = 148 if len(white_lines) == 2 else 196
+        y_cur = 176 if len(white_lines) == 2 else 232
         for wl in white_lines:
-            fsz = 104
+            fsz = 108
             f_use = load_font(FONT_SANS, fsz, 800)
             while fsz >= 56 and dr.textlength(wl, font=f_use) > max_lw:
                 fsz -= 4
                 f_use = load_font(FONT_SANS, fsz, 800)
-            dr.text((50, y_cur), wl, font=f_use, fill=(255, 255, 255, 255))
-            y_cur += int(fsz * 1.12)
+            dr.text((64, y_cur + 4), wl, font=f_use, fill=(0, 0, 0, 155))
+            dr.text((60, y_cur), wl, font=f_use, fill=(252, 250, 246, 255))
+            y_cur += int(fsz * 1.09)
 
-        # Signature Johnny Harris YELLOW HIGHLIGHTER BAR behind the shocking power keyword!
+        # Blazing Vermilion Swiss Redaction Block behind the shocking punchline phrase!
         hl_txt = l3 or "DECLASSIFIED"
         fsz_h = 84
         f_hl = load_font(FONT_SANS, fsz_h, 800)
-        while fsz_h >= 46 and dr.textlength(hl_txt, font=f_hl) > 515:
+        while fsz_h >= 46 and dr.textlength(hl_txt, font=f_hl) > 545:
             fsz_h -= 4
             f_hl = load_font(FONT_SANS, fsz_h, 800)
-        hl_w = int(dr.textlength(hl_txt, font=f_hl))
-        hl_y = max(y_cur + 10, 386)
-        hl_h = int(fsz_h * 1.24)
-        dr.rounded_rectangle([40, hl_y, 40 + hl_w + 34, hl_y + hl_h], radius=6, fill=(246, 202, 46, 255))
-        dr.text((57, hl_y + hl_h // 2), hl_txt, font=f_hl, fill=(12, 12, 16, 255), anchor="lm")
+        rw = int(dr.textlength(hl_txt, font=f_hl))
+        ry = max(y_cur + 14, 416)
+        rh = int(fsz_h * 1.34)
+        dr.rectangle([60, ry, 60 + rw + 44, ry + rh], fill=(224, 28, 32, 255))
+        dr.text((82, ry + rh // 2), hl_txt, font=f_hl, fill=(252, 250, 248, 255), anchor="lm")
 
-        # Translucent Crimson Rubber Stamp ('TOP SECRET' / custom stamp_badge)
-        st_txt = str(stamp_badge or "TOP SECRET").strip().upper()[:16]
-        f_st = load_font(FONT_MONO, 36, 700)
-        stw = max(290, int(dr.textlength(st_txt, font=f_st)) + 68)
-        st = Image.new("RGBA", (stw, 94), (0, 0, 0, 0))
-        sdr = ImageDraw.Draw(st)
-        sdr.rectangle([8, 8, stw - 8, 86], outline=(228, 42, 46, 232), width=5)
-        sdr.rectangle([16, 16, stw - 16, 78], outline=(228, 42, 46, 160), width=2)
-        sdr.text((stw // 2, 47), st_txt, font=f_st, fill=(228, 42, 46, 238), anchor="mm")
-        st = st.rotate(6, expand=True, resample=Image.BICUBIC)
-        im.alpha_composite(st, (44, H - st.height - 26))
+        # Authentic black CIA redaction bar + micro-caption at bottom
+        bar_y = min(H - 96, ry + rh + 40)
+        dr.rectangle([64, bar_y, 242, bar_y + 24], fill=(12, 12, 14, 245), outline=(255, 255, 255, 76), width=1)
+        dr.text(
+            (258, bar_y + 1),
+            f"REAL ARCHIVAL FOOTAGE  —  {yr_tag}"[:40],
+            font=load_font(FONT_MONO, 19, 700),
+            fill=(218, 222, 230, 230),
+        )
 
     else:
         # =====================================================================
@@ -1307,8 +1366,8 @@ def generate_v20_thumbnail(hero_img_path, second_img_path, brand, headline_white
         dr.text((62, 638), "FULL ARCHIVAL DOCUMENTARY  •  REAL FOOTAGE", font=load_font(FONT_MONO, 22, 700), fill=(214, 220, 232, 225))
 
     im.convert("RGB").save(out_jpg, "JPEG", quality=94, optimize=True)
-    style_lbl = "OPTION-A CLASSIFIED-RIP" if is_btc else "OPTION-D NETFLIX-POSTER"
-    print(f"[V20.6 {style_lbl} THUMB OK] {out_jpg} ({os.path.getsize(out_jpg)/1024:.1f} KB)")
+    style_lbl = "BEHANCE-1 A24-SWISS-REDACT" if is_btc else "OPTION-D NETFLIX-POSTER"
+    print(f"[V20.7 {style_lbl} THUMB OK] {out_jpg} ({os.path.getsize(out_jpg)/1024:.1f} KB)")
     return out_jpg
 
 

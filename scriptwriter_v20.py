@@ -79,6 +79,30 @@ def _trim_words(txt, max_c):
     return cut if cut else txt[:max_c].strip(" ,.;:-")
 
 
+def _clean_yt_title(txt, max_c=88):
+    """V20.7.2: Guarantees complete, punchy YouTube titles with ZERO mid-word cutoffs or unclosed parentheses."""
+    s = re.sub(r"\s+", " ", str(txt or "")).strip(" ,.;:-–—")
+    s = re.sub(r"\s*#shorts\b", "", s, flags=re.I).strip(" ,.;:-–—")
+    if len(s) > max_c:
+        # First try dropping trailing parenthetical suffix if it pushes over limit
+        no_par = re.sub(r"\s*\([^)]*\)\s*$", "", s).strip(" ,.;:-–—")
+        if 24 <= len(no_par) <= max_c:
+            s = no_par
+        else:
+            s = _trim_words(s, max_c)
+    # Never leave an unclosed '(' or '['
+    if s.count("(") > s.count(")"):
+        s = s.rsplit("(", 1)[0].strip(" ,.;:-–—")
+    if s.count("[") > s.count("]"):
+        s = s.rsplit("[", 1)[0].strip(" ,.;:-–—")
+    # Never end on a dangling function word
+    dangling = {"a", "an", "the", "of", "in", "to", "for", "with", "and", "or", "by", "from", "on", "at", "that", "who", "which", "full"}
+    parts = s.split()
+    while len(parts) > 3 and parts[-1].lower().strip(".,:;-–—") in dangling:
+        parts.pop()
+    return " ".join(parts).strip(" ,.;:-–—")
+
+
 def _call_groq_v20(prompt, api_key, sys_prompt=SYSTEM_PROMPT_V20, max_tokens=1600):
     """2026 Verified Live Groq Models: qwen/qwen3.8-27b (primary) -> openai/gpt-oss-120b (backup)."""
     url = "https://api.groq.com/openai/v1/chat/completions"
@@ -184,8 +208,11 @@ def _deterministic_v20_fallback(ev):
         narration = " ".join(words[:132]).rstrip(",;:") + "."
 
     short_t = re.sub(r"\([^)]*\)", "", ev.get("title") or ev.get("hook_hint") or ev["summary"][:60]).strip()
+    raw_fb_title = f"{ev['year']}: The Untold Truth Behind {short_t}"
+    if len(raw_fb_title) > 88:
+        raw_fb_title = f"{ev['year']}: {short_t}"
     return {
-        "title": _trim_words(f"{ev['year']}: The Untold Truth Behind {short_t}", 66),
+        "title": _clean_yt_title(raw_fb_title, 88),
         "hook_top": _trim_words(f"DECLASSIFIED {ev['year']}" if is_btc else f"{ev['year']} TURNING POINT", 22).upper(),
         "hook_sub": _trim_words(f"{ev['display_date']} • {ev['location']}", 36).upper(),
         "newspaper_headline": _trim_words(f"{ev['year']}: {short_t}", 36).upper(),
@@ -244,8 +271,8 @@ def write_script_v20(ev):
         if not out.get(k):
             out[k] = v
 
-    # Sanitize lengths
-    out["title"] = _trim_words(out["title"], 66)
+    # Sanitize lengths (V20.7.2: allow up to 88 chars so complete titles NEVER drop final nouns before #Shorts!)
+    out["title"] = _clean_yt_title(out["title"], 88)
     out["hook_top"] = _trim_words(out["hook_top"], 24).upper()
     out["hook_sub"] = _trim_words(out["hook_sub"], 38).upper()
     out["newspaper_headline"] = _trim_words(out["newspaper_headline"], 42).upper()

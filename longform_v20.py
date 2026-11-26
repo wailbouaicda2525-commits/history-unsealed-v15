@@ -96,7 +96,7 @@ Given a verified historical topic and its real Wikipedia section map, design a g
 Each chapter title MUST read like a compelling clickable YouTube chapter on the timeline (e.g. 'The buses on the hill', 'Six seconds in Dallas', 'The secret cable snaps', 'Adenauer in Moscow' — vivid, concrete, chronological!).
 Return ONLY valid JSON:
 {
-  "video_title": "High-CTR US YouTube Documentary Title <= 82 chars (curiosity gap, authoritative)",
+  "video_title": "High-CTR US YouTube Documentary Title 48-76 chars (complete words, curiosity gap, authoritative)",
   "thumb_white": "FIRST 2-3 WHITE WORDS OF VIRAL SPLIT-SCREEN THUMBNAIL (ALL CAPS, e.g. 'THE WALL CAME')",
   "thumb_red": "1-2 EXPLOSIVE RED POWER WORDS AT END OF THUMBNAIL (ALL CAPS, e.g. 'OVERNIGHT')",
   "thumb_stamp": "SHORT RED ARCHIVAL STAMP <= 16 chars (ALL CAPS, e.g. 'CIA ARCHIVE' or 'DECLASSIFIED')",
@@ -109,7 +109,7 @@ Return ONLY valid JSON:
   ],
   "tags": ["history documentary", "full documentary", "us history", "6-10 high-RPM SEO tags"],
   "outline": [
-    {"chapter_title": "Vivid YouTube Chapter Title <= 40 chars", "focus": "1-sentence investigative angle for this chapter"}
+    {"chapter_title": "100% UNIQUE Vivid YouTube Chapter Title <= 40 chars (NEVER repeat any chapter title!)", "focus": "1-sentence investigative angle for this chapter"}
   ]
 }"""
 
@@ -397,6 +397,82 @@ def _slice_dossier_into_buckets(dossier, n_ch):
     return buckets
 
 
+def _clean_doc_title_v20(txt, year=None, max_c=92):
+    """V20.7.2: Guarantees complete YouTube documentary titles with ZERO mid-word cutoff or unclosed '('."""
+    s = re.sub(r"\s+", " ", str(txt or "")).strip(" ,.;:-–—")
+    if len(s) > max_c:
+        # Try replacing '(YYYY Full Documentary)' with clean '(YYYY)' first
+        s2 = re.sub(r"\s*\((\d{4})\s+Full\s+Documentary\)\s*$", r" (\1)", s, flags=re.I)
+        if len(s2) <= max_c:
+            s = s2
+        else:
+            no_par = re.sub(r"\s*\([^)]*\)\s*$", "", s).strip(" ,.;:-–—")
+            if 28 <= len(no_par) <= max_c:
+                s = no_par
+            else:
+                s = _trim_words(s, max_c)
+    if s.count("(") > s.count(")"):
+        s = s.rsplit("(", 1)[0].strip(" ,.;:-–—")
+    if s.count("[") > s.count("]"):
+        s = s.rsplit("[", 1)[0].strip(" ,.;:-–—")
+    dangling = {"a", "an", "the", "of", "in", "to", "for", "with", "and", "or", "by", "from", "on", "at", "that", "who", "which", "full"}
+    parts = s.split()
+    while len(parts) > 3 and parts[-1].lower().strip(".,:;-–—") in dangling:
+        parts.pop()
+    out = " ".join(parts).strip(" ,.;:-–—")
+    if year and str(year) not in out and len(out) + len(str(year)) + 3 <= max_c:
+        out = f"{out} ({year})"
+    return out
+
+
+def _dedupe_chapter_titles_v20(chapters):
+    """V20.7.2: Guarantees 100% UNIQUE clickable YouTube Chapter labels (ZERO repeated headings like 'Construction' x3!)."""
+    phase_suffixes = [
+        "The Breakthrough",
+        "Inside the Operation",
+        "Rising Tension",
+        "The Turning Point",
+        "Hidden Complications",
+        "Point of No Return",
+        "The Fallout",
+        "Declassified Aftermath",
+    ]
+    dangling = {"a", "an", "the", "of", "in", "to", "for", "with", "and", "or", "by", "from", "on", "at"}
+
+    def _clean_prefix(txt, lim):
+        p = _trim_words(txt, lim).split()
+        while len(p) > 1 and p[-1].lower().strip(".,:;-–—") in dangling:
+            p.pop()
+        return " ".join(p)
+
+    seen = {}
+    used_norm = set()
+    for idx, ch in enumerate(chapters):
+        base = re.sub(r"\s+", " ", str(ch.get("chapter_title") or f"Chapter {idx + 1}")).strip(" ,.;:-–—")
+        norm = base.lower()
+        if norm not in used_norm:
+            used_norm.add(norm)
+            seen[norm] = 1
+            ch["chapter_title"] = _trim_words(base, 42)
+            continue
+
+        seen[norm] = seen.get(norm, 1) + 1
+        occ = seen[norm]
+        narr = str(ch.get("narration") or "")
+        yr_m = re.search(r"\b(1[5-9]\d{2}|20[0-2]\d)\b", narr)
+        cand = ""
+        if yr_m and yr_m.group(1) not in base:
+            cand = f"{_clean_prefix(base, 22)}: {yr_m.group(1)} Escalation"
+        if not cand or cand.lower() in used_norm:
+            suf = phase_suffixes[(occ - 2 + idx) % len(phase_suffixes)]
+            cand = f"{_clean_prefix(base, 18)}: {suf}"
+        if cand.lower() in used_norm:
+            cand = f"{_clean_prefix(base, 26)} — Part {occ}"
+        ch["chapter_title"] = _trim_words(cand, 42)
+        used_norm.add(ch["chapter_title"].lower())
+    return chapters
+
+
 def _fallback_adaptive_script_v20(dossier):
     n_ch = dossier["target_chapters"]
     buckets = _slice_dossier_into_buckets(dossier, n_ch)
@@ -445,9 +521,13 @@ def _fallback_adaptive_script_v20(dossier):
             "climax_stat_sub": f"SECTOR: {dossier['location'][:26]}",
         })
 
+    chapters = _dedupe_chapter_titles_v20(chapters)
     wt = dossier["wiki_title"].upper().split()
+    raw_doc_t = f"{dossier['hook_hint']} ({dossier['year']} Full Documentary)"
+    if len(raw_doc_t) > 92:
+        raw_doc_t = f"{dossier['hook_hint']} ({dossier['year']})"
     return {
-        "video_title": _trim_words(f"{dossier['hook_hint']} ({dossier['year']} Full Documentary)", 86),
+        "video_title": _clean_doc_title_v20(raw_doc_t, year=dossier["year"], max_c=92),
         "thumb_white": _trim_words(" ".join(wt[:-1]) if len(wt) > 1 else "THE SECRET OF", 18).upper(),
         "thumb_red": _trim_words(wt[-1] if wt else str(dossier["year"]), 14).upper(),
         "thumb_stamp": "CIA ARCHIVE" if dossier["mode"] == "behind_the_curtain" else "HISTORY UNSEALED",
@@ -514,8 +594,9 @@ def build_longform_script_v20(dossier):
         prev_closing = final_chapters[-1]["narration"][-220:]
         time.sleep(0.9)
 
+    final_chapters = _dedupe_chapter_titles_v20(final_chapters)
     res = {
-        "video_title": _trim_words(bp.get("video_title") or fb["video_title"], 92),
+        "video_title": _clean_doc_title_v20(bp.get("video_title") or fb["video_title"], year=dossier["year"], max_c=92),
         "thumb_white": _trim_words(bp.get("thumb_white") or fb["thumb_white"], 20).upper(),
         "thumb_red": _trim_words(bp.get("thumb_red") or fb["thumb_red"], 14).upper(),
         "thumb_stamp": _trim_words(bp.get("thumb_stamp") or fb["thumb_stamp"], 16).upper(),
