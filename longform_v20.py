@@ -791,7 +791,7 @@ def main():
         f"CHAPTERS:\n" + "\n".join(chapter_lines) + "\n\n"
         f"{cfg['description_footer']}\n\n"
         f"Verified Archival Sources:\n{sources_txt}\n"
-        f"Map cartography © Esri World Dark Gray Base.\n\n"
+        f"Map cartography © Esri World Imagery Satellite.\n\n"
         f"{cfg.get('weekly_hashtags', '#HistoryDocumentary #ColdWar #USHistory #Declassified')} #{dossier['year']}"
     )
 

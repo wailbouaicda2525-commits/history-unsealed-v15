@@ -404,26 +404,65 @@ def _latlon_to_tile_xy(lat, lon, zoom):
 
 
 def stitch_esri_dark_map(lat, lon, out_png, zoom=8, cols=6, rows=6):
-    """Zero-watermark real Esri World Dark Gray Base cartography for any GPS coordinates on Earth."""
+    """Zero-watermark real Esri World Imagery SATELLITE cartography + subtle borders/labels for any GPS coordinates."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    # For macro 3D Earth Globe (zoom <= 4), stitch full seamless 360-degree Earth at zoom=3 (8x8 tiles -> ZERO seam!)
+    if zoom <= 4:
+        zoom = 3
+        cols, rows = 8, 8
+
     xt, yt = _latlon_to_tile_xy(lat, lon, zoom)
     cx, cy = int(math.floor(xt)), int(math.floor(yt))
-    x0, y0 = cx - cols // 2, cy - rows // 2
+    x0 = (cx - cols // 2) if zoom > 3 else 0
+    y0 = (cy - rows // 2) if zoom > 3 else 0
     n_tiles = 2 ** zoom
-    canvas = Image.new("RGB", (cols * 256, rows * 256), (18, 22, 30))
-    for dy in range(rows):
-        for dx in range(cols):
-            tx = (x0 + dx) % n_tiles
-            ty = max(0, min(n_tiles - 1, y0 + dy))
-            url = f"https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{zoom}/{ty}/{tx}"
+    add_labels = (zoom >= 6)
+    canvas = Image.new("RGB", (cols * 256, rows * 256), (10, 18, 30))
+
+    def _fetch_tile(coord):
+        dx, dy = coord
+        tx = (x0 + dx) % n_tiles
+        ty = max(0, min(n_tiles - 1, y0 + dy))
+        sat_url = f"https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{zoom}/{ty}/{tx}"
+        tile = None
+        try:
+            req = urllib.request.Request(sat_url, headers=HDR)
+            with urllib.request.urlopen(req, timeout=10) as r:
+                tile = Image.open(BytesIO(r.read())).convert("RGB")
+        except Exception:
             try:
-                req = urllib.request.Request(url, headers=HDR)
-                with urllib.request.urlopen(req, timeout=10) as r:
+                fb_url = f"https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{zoom}/{ty}/{tx}"
+                req = urllib.request.Request(fb_url, headers=HDR)
+                with urllib.request.urlopen(req, timeout=8) as r:
                     tile = Image.open(BytesIO(r.read())).convert("RGB")
-                canvas.paste(tile, (dx * 256, dy * 256))
+            except Exception:
+                return dx, dy, None
+        if tile is not None and add_labels:
+            ref_url = f"https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{zoom}/{ty}/{tx}"
+            try:
+                req2 = urllib.request.Request(ref_url, headers=HDR)
+                with urllib.request.urlopen(req2, timeout=6) as r2:
+                    ov = Image.open(BytesIO(r2.read())).convert("RGBA")
+                a = ov.split()[3].point(lambda v: int(v * 0.56))
+                ov.putalpha(a)
+                t_rgba = tile.convert("RGBA")
+                t_rgba.alpha_composite(ov)
+                tile = t_rgba.convert("RGB")
             except Exception:
                 pass
-    canvas = ImageEnhance.Contrast(canvas).enhance(1.22)
-    canvas = ImageEnhance.Brightness(canvas).enhance(0.90)
+        return dx, dy, tile
+
+    coords = [(dx, dy) for dy in range(rows) for dx in range(cols)]
+    with ThreadPoolExecutor(max_workers=12) as ex:
+        for dx, dy, tile in ex.map(_fetch_tile, coords):
+            if tile is not None:
+                canvas.paste(tile, (dx * 256, dy * 256))
+
+    # Rich cinematic satellite grading (vivid deep ocean + crisp terrain so neon tactical HUD explodes!)
+    canvas = ImageEnhance.Color(canvas).enhance(1.22)
+    canvas = ImageEnhance.Contrast(canvas).enhance(1.16)
+    canvas = ImageEnhance.Brightness(canvas).enhance(0.88 if add_labels else 0.96)
     canvas.save(out_png)
     px = (xt - x0) * 256.0
     py = (yt - y0) * 256.0

@@ -441,10 +441,13 @@ def render_v20_cinema(ev, script, voice_dur, words, audio_m4a, env30, spec30, ou
 
     map_mac = cv2.imread(ev["map_macro"]["path"])
     map_loc = cv2.imread(ev["map_local"]["path"])
+    # Ultra-subtle translucent satellite telemetry grid (keeps real Esri Satellite terrain crisp!)
+    _grid_ov = map_loc.copy()
     for gx in range(0, map_loc.shape[1], 128):
-        cv2.line(map_loc, (gx, 0), (gx, map_loc.shape[0]), (36, 42, 54), 1)
+        cv2.line(_grid_ov, (gx, 0), (gx, map_loc.shape[0]), (145, 195, 215), 1)
     for gy in range(0, map_loc.shape[0], 128):
-        cv2.line(map_loc, (0, gy), (map_loc.shape[1], gy), (36, 42, 54), 1)
+        cv2.line(_grid_ov, (0, gy), (map_loc.shape[1], gy), (145, 195, 215), 1)
+    map_loc = cv2.addWeighted(map_loc, 0.86, _grid_ov, 0.14, 0)
 
     # 3) 3D Earth Globe LUT
     globe_r = int(min(W, H) * 0.39)
@@ -462,8 +465,8 @@ def render_v20_cinema(ev, script, voice_dur, words, audio_m4a, env30, spec30, ou
     mh_m, mw_m = map_mac.shape[:2]
     lon_g = np.arcsin(np.clip(dx_g / np.maximum(0.01, np.sqrt(np.clip(1.0 - dy_g * dy_g, 0.001, 1.0))), -1, 1))
     lat_g = np.arcsin(np.clip(dy_g, -1, 1))
-    g_mx = (ev["map_macro"]["px"] + lon_g * (mw_m * 0.45)).astype(np.float32)
-    g_my = (ev["map_macro"]["py"] + lat_g * (mh_m * 0.48)).astype(np.float32)
+    g_mx = (ev["map_macro"]["px"] + lon_g * (mw_m / (2.0 * math.pi))).astype(np.float32)
+    g_my = np.clip(ev["map_macro"]["py"] + lat_g * (mh_m / math.pi) * 0.85, 2.0, mh_m - 3.0).astype(np.float32)
 
     # 4) Fonts & Pre-Built V20 Cinema Assets
     f_huge = load_font(FONT_SANS, 160 if vertical else 184, 800)
@@ -618,37 +621,51 @@ def render_v20_cinema(ev, script, voice_dur, words, audio_m4a, env30, spec30, ou
                     fr = add_anamorphic_flare(fr, int(H * 0.44), int(W * fl_p), intensity=0.58 * math.sin(math.pi * fl_p), color_bgr=(65, 195, 255))
                 return fr
             elif p < 0.70:
+                # 3D REAL SATELLITE EARTH ORBITAL DROP (vivid Esri Satellite Globe + blue atmospheric Fresnel glow!)
                 q = (p - 0.45) / 0.25
                 rot_x = (1.0 - ease_io(q)) * 175.0
                 tex = cv2.remap(map_mac, g_mx - rot_x, g_my, cv2.INTER_LINEAR, borderMode=cv2.BORDER_WRAP)
-                shaded = np.clip(tex.astype(np.float32) * g_shade[:, :, None], 0, 255).astype(np.uint8)
+                sun_shade = np.clip(g_shade * 1.18 + 0.10, 0.0, 1.18)
+                shaded = np.clip(tex.astype(np.float32) * sun_shade[:, :, None], 0, 255).astype(np.uint8)
                 rim = np.zeros_like(shaded)
-                rim[:, :, 0] = np.clip(g_rim * 245 + g_halo * 195, 0, 255).astype(np.uint8)
-                rim[:, :, 1] = np.clip(g_rim * 165 + g_halo * 120, 0, 255).astype(np.uint8)
-                rim[:, :, 2] = np.clip(g_rim * 82 + g_halo * 45, 0, 255).astype(np.uint8)
+                rim[:, :, 0] = np.clip(g_rim * 255 + g_halo * 225, 0, 255).astype(np.uint8)
+                rim[:, :, 1] = np.clip(g_rim * 185 + g_halo * 145, 0, 255).astype(np.uint8)
+                rim[:, :, 2] = np.clip(g_rim * 72 + g_halo * 42, 0, 255).astype(np.uint8)
                 fr = np.where(g_mask[:, :, None], cv2.add(shaded, rim), cv2.add(star_bg, rim))
-                cv2.circle(fr, (W // 2, H // 2), globe_r + 32, (62, 74, 98), 1, cv2.LINE_AA)
+                cv2.circle(fr, (W // 2, H // 2), globe_r + 32, (95, 165, 225), 1, cv2.LINE_AA)
                 z = 1.0 + 1.85 * (ease_io(max(0.0, (q - 0.28) / 0.72)) ** 1.85)
                 fr = cv2.warpAffine(fr, cv2.getRotationMatrix2D((W / 2.0, H / 2.0), 0, z), (W, H))
-                cv2.circle(fr, (W // 2, H // 2), int(16 + (q * 110) % 44), (52, 46, 246), 3, cv2.LINE_AA)
+                # Pulsing crimson + gold orbital target lock descending onto GPS epicenter
+                cv2.circle(fr, (W // 2, H // 2), int(20 + (q * 115) % 52), (48, 42, 255), 3, cv2.LINE_AA)
+                cv2.circle(fr, (W // 2, H // 2), int(12 + ((q * 115 + 24) % 52)), (56, 212, 255), 2, cv2.LINE_AA)
                 cv2.circle(fr, (W // 2, H // 2), 9, (68, 68, 255), -1, cv2.LINE_AA)
+                cv2.circle(fr, (W // 2, H // 2), 4, (255, 255, 255), -1, cv2.LINE_AA)
                 if q > 0.85:
                     fl = int(205 * ((q - 0.85) / 0.15))
                     fr = cv2.add(fr, np.full((H, W, 3), fl, dtype=np.uint8))
                 return fr
             else:
+                # 3D-TILTED REAL ESRI SATELLITE TACTICAL MAP + NEON ZONE BLOOM + ANIMATED VECTOR ROUTE!
                 q = (p - 0.70) / 0.30
                 mp = map_loc.copy()
                 tx, ty = int(ev["map_local"]["px"]), int(ev["map_local"]["py"])
+                # Soft glowing crimson-amber tactical halo over real satellite epicenter
+                halo_ov = np.zeros_like(mp)
+                cv2.circle(halo_ov, (tx, ty), 165, (38, 44, 245), -1, cv2.LINE_AA)
+                cv2.circle(halo_ov, (tx, ty), 75, (42, 165, 255), -1, cv2.LINE_AA)
+                halo_ov = cv2.GaussianBlur(halo_ov, (0, 0), sigmaX=42, sigmaY=42)
+                cv2.addWeighted(mp, 1.0, halo_ov, 0.55, 0, dst=mp)
+                # Live rotating radar sweep
                 sweep_ov = np.zeros_like(mp)
                 ang0 = (t * 155.0) % 360.0
-                cv2.ellipse(sweep_ov, (tx, ty), (240, 240), 0, ang0 - 52, ang0, (44, 34, 215), -1, cv2.LINE_AA)
-                mp = cv2.addWeighted(mp, 1.0, sweep_ov, 0.36, 0)
+                cv2.ellipse(sweep_ov, (tx, ty), (245, 245), 0, ang0 - 52, ang0, (44, 34, 235), -1, cv2.LINE_AA)
+                cv2.addWeighted(mp, 1.0, sweep_ov, 0.38, 0, dst=mp)
                 ang_r = math.radians(ang0)
-                cv2.line(mp, (tx, ty), (int(tx + 240 * math.cos(ang_r)), int(ty + 240 * math.sin(ang_r))), (85, 90, 255), 3, cv2.LINE_AA)
+                cv2.line(mp, (tx, ty), (int(tx + 245 * math.cos(ang_r)), int(ty + 245 * math.sin(ang_r))), (95, 110, 255), 3, cv2.LINE_AA)
                 for rk in range(3):
-                    rr = int(20 + ((q * 210 + rk * 68) % 210))
-                    cv2.circle(mp, (tx, ty), rr, (48, 42, 244), 3, cv2.LINE_AA)
+                    rr = int(22 + ((q * 215 + rk * 70) % 215))
+                    cv2.circle(mp, (tx, ty), rr, (62, 62, 255), 3, cv2.LINE_AA)
+                # Animated glowing dashed + solid mission vector route over satellite terrain
                 ox, oy = tx - 380, ty + 290
                 cx_b, cy_b = tx - 210, ty - 140
                 n_arc = max(4, int(44 * ease_out(min(1.0, q / 0.70))))
@@ -659,11 +676,14 @@ def render_v20_cinema(ev, script, voice_dur, words, audio_m4a, env30, spec30, ou
                                     int((1 - u) ** 2 * oy + 2 * (1 - u) * u * cy_b + u ** 2 * ty)])
                 if len(arc_pts) >= 2:
                     ap = np.array(arc_pts, dtype=np.int32)
-                    cv2.polylines(mp, [ap], False, (36, 30, 175), 11, cv2.LINE_AA)
-                    cv2.polylines(mp, [ap], False, (80, 165, 255), 4, cv2.LINE_AA)
-                    cv2.circle(mp, tuple(arc_pts[-1]), 11, (110, 215, 255), -1, cv2.LINE_AA)
-                cv2.circle(mp, (tx, ty), 15, (52, 44, 252), -1, cv2.LINE_AA)
-                cv2.circle(mp, (tx, ty), 6, (255, 255, 255), -1, cv2.LINE_AA)
+                    cv2.polylines(mp, [ap], False, (36, 30, 195), 14, cv2.LINE_AA)
+                    cv2.polylines(mp, [ap], False, (52, 212, 255), 5, cv2.LINE_AA)
+                    for k in range(0, len(arc_pts) - 1, 3):
+                        cv2.line(mp, tuple(arc_pts[k]), tuple(arc_pts[min(len(arc_pts) - 1, k + 1)]), (255, 255, 255), 3, cv2.LINE_AA)
+                    cv2.circle(mp, tuple(arc_pts[-1]), 13, (48, 224, 255), -1, cv2.LINE_AA)
+                    cv2.circle(mp, tuple(arc_pts[-1]), 6, (255, 255, 255), -1, cv2.LINE_AA)
+                cv2.circle(mp, (tx, ty), 17, (44, 44, 255), -1, cv2.LINE_AA)
+                cv2.circle(mp, (tx, ty), 7, (255, 255, 255), -1, cv2.LINE_AA)
                 hw = (440 if vertical else 640) - int(155 * ease_io(q))
                 hh = int(hw * (H / float(W)))
                 tilt = int(hw * 0.24)
@@ -676,11 +696,11 @@ def render_v20_cinema(ev, script, voice_dur, words, audio_m4a, env30, spec30, ou
                 bw_c = 880 if vertical else 660
                 bx_c = (W - bw_c) // 2 if vertical else 68
                 by_c = 205 if vertical else 104
-                dr.rounded_rectangle([bx_c, by_c, bx_c + bw_c, by_c + 162], radius=10, fill=(8, 12, 20, 232), outline=(228, 36, 44, 248), width=3)
+                dr.rounded_rectangle([bx_c, by_c, bx_c + bw_c, by_c + 162], radius=12, fill=(8, 12, 22, 224), outline=(0, 212, 255, 235), width=3)
                 dr.rectangle([bx_c, by_c, bx_c + 12, by_c + 162], fill=(228, 36, 44, 255))
-                dr.text((bx_c + 34, by_c + 36), f"VECTOR: {ev.get('origin_name', 'HQ')} -> TARGET LOCKED  •  {ev.get('dist_km', 2400):,} KM", fill=(248, 206, 72, 255), font=f_m18, anchor="lm")
+                dr.text((bx_c + 34, by_c + 36), f"SAT RECON: {ev.get('origin_name', 'HQ')} -> TARGET  •  {ev.get('dist_km', 2400):,} KM", fill=(255, 214, 48, 255), font=f_m18, anchor="lm")
                 dr.text((bx_c + 34, by_c + 86), ev["location"][:25], fill=(254, 250, 244, 255), font=f_h2, anchor="lm")
-                dr.text((bx_c + 34, by_c + 134), f"LAT {ev['lat']:+.4f}   |   LON {ev['lon']:+.4f}   |   DECLASSIFIED", fill=(165, 180, 204, 245), font=f_m18, anchor="lm")
+                dr.text((bx_c + 34, by_c + 134), f"LAT {ev['lat']:+.4f}   |   LON {ev['lon']:+.4f}   |   LIVE SATELLITE", fill=(140, 215, 248, 245), font=f_m18, anchor="lm")
                 return comp_rgba(fr, np.asarray(ui), W / 2.0, H / 2.0)
 
         elif si == 1:
