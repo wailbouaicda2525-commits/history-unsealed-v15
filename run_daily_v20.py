@@ -92,11 +92,12 @@ def main():
     if len(yt_title) > 100:
         yt_title = script["title"][:91].rsplit(" ", 1)[0] + " #Shorts"
     yt_desc = (
-        f"{script['title']}\n\n"
-        f"{script['narration']}\n\n"
-        f"Date: {ev['display_date']} | Location: {ev['location']}\n"
-        f"{'Source Archive: ' + ev['wiki_url'] + chr(10) if ev.get('wiki_url') else ''}\n"
         f"{cfg['description_footer']}\n\n"
+        f"---\n"
+        f"{script['title']}\n"
+        f"Date: {ev['display_date']} | Location: {ev['location']}\n\n"
+        f"{script['narration']}\n\n"
+        f"{'Source Archive: ' + ev['wiki_url'] + chr(10) if ev.get('wiki_url') else ''}"
         f"{cfg['hashtags']}"
     )
     tags = list(dict.fromkeys([t.strip() for t in (script.get("tags", []) + ["history", "us history", "shorts", "documentary"]) if t.strip()]))
