@@ -1,8 +1,8 @@
 name: History Unsealed — V20.5 CINEMA Adaptive Documentary (Every 2 Days)
 
 on:
-  schedule:
-    - cron: '0 19 2-30/2 * *'
+  # schedule: disabled (triggered on-time via cron-job.org workflow_dispatch)
+    # - cron: '0 19 2-30/2 * *'
   workflow_dispatch:
     inputs:
       topic:
