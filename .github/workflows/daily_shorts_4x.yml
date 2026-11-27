@@ -1,8 +1,8 @@
 name: History Unsealed — 4x Daily V20.5 CINEMA Shorts
 
 on:
-  schedule:
-    - cron: '30 12,16,20,0 * * *'
+  # schedule: disabled (triggered on-time via cron-job.org workflow_dispatch)
+    # - cron: '30 12,16,20,0 * * *'
   workflow_dispatch:
     inputs:
       month:
