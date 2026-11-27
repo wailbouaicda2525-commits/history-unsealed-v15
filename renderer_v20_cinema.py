@@ -291,6 +291,10 @@ def build_subtitle_cues(words, speech_off, vertical=True):
             buf = []
     if buf:
         cues.append({"t0": buf[0]["t0"], "t1": buf[-1]["t1"] + 0.08, "words": list(buf)})
+    # Clamp cue end times strictly before the next cue starts so captions never lag into the next phrase!
+    for idx_c in range(len(cues) - 1):
+        if cues[idx_c]["t1"] >= cues[idx_c + 1]["t0"]:
+            cues[idx_c]["t1"] = max(cues[idx_c]["t0"] + 0.05, cues[idx_c + 1]["t0"] - 0.01)
     return cues
 
 
@@ -365,10 +369,11 @@ def render_v20_cinema(ev, script, voice_dur, words, audio_m4a, env30, spec30, ou
     FPS = 30 if vertical else 24
     speech_off = 0.45
     outro_len = 4.2 if show_outro else 0.0
-    total_dur = round(speech_off + voice_dur + (outro_len + 0.35 if show_outro else 1.2), 2)
+    raw_d = speech_off + voice_dur + (outro_len + 0.35 if show_outro else 1.2)
     if vertical:
-        total_dur = min(59.0, total_dur)
-    n_frames = int(round(total_dur * FPS))
+        raw_d = min(59.0, raw_d)
+    n_frames = int(round(raw_d * FPS))
+    total_dur = n_frames / float(FPS)
     brand = ev.get("channel_name", "BEHIND THE CURTAIN").upper()
     is_btc = (ev.get("mode") == "behind_the_curtain")
     rng = np.random.default_rng(ev["year"] * 37 + ev["day"] + len(brand))
@@ -1378,8 +1383,9 @@ def render_midroll_book_commercial_16x9(mode, brand, voice_mp3, voice_dur, out_m
     ('The Declassified Vault' + 'History Unsealed') + 33% Collector's Bundle CTA + real voiceover!
     """
     W, H, FPS = 1920, 1080, 24
-    dur = max(8.5, voice_dur + 1.2)
-    n_frames = int(round(dur * FPS))
+    raw_dur = max(8.5, voice_dur + 1.2)
+    n_frames = int(round(raw_dur * FPS))
+    dur = n_frames / float(FPS)
     is_btc = (mode == "behind_the_curtain")
     main_title = "THE DECLASSIFIED VAULT" if is_btc else "HISTORY UNSEALED"
     comp_title = "HISTORY UNSEALED" if is_btc else "THE DECLASSIFIED VAULT"

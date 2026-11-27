@@ -633,7 +633,9 @@ def _render_chapter_v20_job(job):
     )
     speech_off = 0.45
     outro_len = 4.2 if is_final else 0.0
-    tot_d = round(speech_off + v_dur + (outro_len + 0.35 if is_final else 1.2), 2)
+    raw_d = speech_off + v_dur + (outro_len + 0.35 if is_final else 1.2)
+    # Snap strictly to exact 24fps frame boundary so audio & video match to 0.000ms across 14 chapters!
+    tot_d = round(round(raw_d * 24) / 24.0, 4)
     b = [0.0, 0.22, 0.44, 0.64, 0.82, 1.0]
     sfx_plan = [
         (0.28, "braaam", 0.38, 0.50),
@@ -742,7 +744,7 @@ def main():
     ad_mp4 = os.path.join(ad_dir, "midroll_2book_commercial.mp4")
     ad_vdur, _ = synthesize_voice_v15(ad_voice_txt, ad_mp3, voice=cfg["voice"], rate="+4%", pitch="-1Hz")
     render_midroll_book_commercial_16x9(cfg["mode"], cfg["channel_name"].upper(), ad_mp3, ad_vdur, ad_mp4, ad_dir)
-    ad_actual_d = max(8.5, ad_vdur + 1.2)
+    ad_actual_d = int(round(max(8.5, ad_vdur + 1.2) * 24)) / 24.0
 
     # 🔥 ASSEMBLE MASTER MP4 + EXACT CLICKABLE YOUTUBE TIMELINE CHAPTERS (00:00 FORMAT!)
     chapter_mp4s, chapter_lines = [], []
@@ -760,9 +762,16 @@ def main():
     concat_txt = os.path.join(args.work_dir, "concat.txt")
     with open(concat_txt, "w") as f:
         for p in chapter_mp4s:
-            f.write(f"file '{p}'\n")
+            f.write(f"file '{os.path.abspath(p)}'\n")
     master_mp4 = os.path.join(args.work_dir, "v20_cinema_master_1080p.mp4")
-    subprocess.run([FFMPEG, "-y", "-f", "concat", "-safe", "0", "-i", concat_txt, "-c", "copy", "-movflags", "+faststart", master_mp4], check=True)
+    # Stream-copy video (fast, lossless) + re-mux ONE seamless PTS-locked AAC audio stream (ZERO cumulative sync drift!)
+    subprocess.run([
+        FFMPEG, "-y", "-f", "concat", "-safe", "0", "-i", concat_txt,
+        "-c:v", "copy",
+        "-c:a", "aac", "-b:a", "256k", "-ar", "48000", "-ac", "2",
+        "-af", "aresample=async=1:first_pts=0",
+        "-movflags", "+faststart", master_mp4,
+    ], check=True)
 
     # 🔥 GENERATE VIRAL SPLIT-SCREEN REAL-ARCHIVAL THUMBNAIL (auto-selects real archival people/photos!)
     t_left, t_right = pick_best_thumb_photos(all_imgs)

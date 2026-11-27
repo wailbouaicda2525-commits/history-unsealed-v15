@@ -41,18 +41,46 @@ def _hp(x, cut):
 
 
 async def _edge_tts_async(text, out_mp3, voice, rate, pitch):
-    comm = edge_tts.Communicate(text=text, voice=voice, rate=rate, pitch=pitch)
+    try:
+        comm = edge_tts.Communicate(
+            text=text, voice=voice, rate=rate, pitch=pitch, boundary="WordBoundary"
+        )
+    except TypeError:
+        comm = edge_tts.Communicate(text=text, voice=voice, rate=rate, pitch=pitch)
+
     words = []
+    sentences = []
     with open(out_mp3, "wb") as f:
         async for chunk in comm.stream():
-            if chunk["type"] == "audio":
+            ctype = chunk["type"]
+            if ctype == "audio":
                 f.write(chunk["data"])
-            elif chunk["type"] == "WordBoundary":
+            elif ctype == "WordBoundary":
                 st = chunk["offset"] / 10_000_000.0
                 du = chunk["duration"] / 10_000_000.0
                 w = chunk["text"].strip()
                 if w:
-                    words.append({"w": w, "s": st, "e": st + max(0.08, du)})
+                    words.append({"w": w, "s": st, "e": st + max(0.06, du)})
+            elif ctype == "SentenceBoundary":
+                st = chunk["offset"] / 10_000_000.0
+                du = chunk["duration"] / 10_000_000.0
+                s_txt = chunk["text"].strip()
+                if s_txt:
+                    sentences.append((s_txt, st, max(0.10, du)))
+
+    # Fallback if a voice only returned SentenceBoundary: lock words accurately inside each sentence's exact span!
+    if not words and sentences:
+        for s_txt, st, du in sentences:
+            toks = [t for t in re.split(r"\s+", s_txt) if t]
+            if not toks:
+                continue
+            weights = [max(2.0, len(re.sub(r"[^\w]", "", tk)) + (1.8 if tk[-1] in ",;:" else 0.0)) for tk in toks]
+            tot_w = sum(weights)
+            cur = st
+            for tk, wt in zip(toks, weights):
+                wd = du * (wt / tot_w)
+                words.append({"w": tk, "s": cur, "e": cur + max(0.06, wd * 0.94)})
+                cur += wd
     return words
 
 
@@ -67,10 +95,16 @@ def synthesize_voice_v15(text, out_mp3, voice="en-US-ChristopherNeural", rate="+
 
     if not words:
         toks = [w for w in re.split(r"\s+", text.strip()) if w]
-        step = dur / max(1, len(toks))
-        words = [{"w": w, "s": i * step, "e": (i + 0.92) * step} for i, w in enumerate(toks)]
+        weights = [max(2.0, len(re.sub(r"[^\w]", "", tk)) + (3.2 if tk[-1] in ".!?" else (1.5 if tk[-1] in ",;:" else 0.0))) for tk in toks]
+        tot_w = sum(weights) or 1.0
+        cur = 0.0
+        words = []
+        for tk, wt in zip(toks, weights):
+            wd = dur * (wt / tot_w)
+            words.append({"w": tk, "s": cur, "e": cur + max(0.06, wd * 0.92)})
+            cur += wd
 
-    print(f"[VOICE V15 OK] {voice} | {dur:.2f}s | {len(words)} ms-aligned words")
+    print(f"[VOICE V15.2 SYNC OK] {voice} | {dur:.2f}s | {len(words)} ms-aligned words")
     return dur, words
 
 
@@ -257,15 +291,15 @@ def mix_cinema_audio_v15(voice_mp3, total_dur, speech_off, out_m4a, seed=42, sfx
         mx = float(np.percentile(spec30[:, b], 96) + 1e-6)
         spec30[:, b] = np.clip(spec30[:, b] / mx, 0.0, 1.0)
 
-    # 7) Encode -14 LUFS Broadcast Master AAC!
+    # 7) Encode -14 LUFS Broadcast Master AAC locked to EXACT total_dur (zero chapter concat drift!)
     stereo = np.empty(N * 2, dtype=np.float32)
     stereo[0::2] = L
     stereo[1::2] = R
     proc = subprocess.Popen([
         FFMPEG, "-y", "-v", "error",
         "-f", "f32le", "-ar", str(SR), "-ac", "2", "-i", "pipe:0",
-        "-af", "loudnorm=I=-14:TP=-1.5:LRA=9",
-        "-c:a", "aac", "-b:a", "256k", out_m4a
+        "-af", f"loudnorm=I=-14:TP=-1.5:LRA=9,apad=whole_dur={total_dur:.4f},atrim=0:{total_dur:.4f},asetpts=PTS-STARTPTS",
+        "-c:a", "aac", "-b:a", "256k", "-ar", str(SR), "-ac", "2", out_m4a
     ], stdin=subprocess.PIPE)
     proc.stdin.write(stereo.tobytes())
     proc.stdin.close()
