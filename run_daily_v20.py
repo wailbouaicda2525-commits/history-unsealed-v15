@@ -17,6 +17,7 @@ from video_scout_v20 import scout_real_videos_v20
 from voice_engine_v15 import synthesize_voice_v15, mix_cinema_audio_v15
 from renderer_v20_cinema import render_v20_cinema, pick_best_thumb_photos, generate_v21_shorts_thumbnail
 from uploader_v15 import upload_video_to_youtube, send_telegram
+from publisher_facebook_v21 import upload_fb_reel
 
 
 def main():
@@ -125,6 +126,11 @@ def main():
         return
 
     vid = upload_video_to_youtube(args.out_mp4, yt_title, yt_desc, tags, privacy=privacy, thumbnail_path=short_thumb)
+    try:
+        fb_reel_desc = f"{script['narration'][:950]}\n\n👇 What do you think really happened? Comment below!\n{cfg['hashtags']}"
+        upload_fb_reel(args.out_mp4, script["title"], fb_reel_desc, thumb_path=short_thumb)
+    except Exception as _fe:
+        print(f"[FB REEL] Non-fatal cross-post warning: {_fe}", flush=True)
     os.makedirs("state", exist_ok=True)
     hp = "state/history_log.json"
     hist = json.load(open(hp)) if os.path.exists(hp) else []

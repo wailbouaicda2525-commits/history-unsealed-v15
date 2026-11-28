@@ -1,0 +1,66 @@
+name: History Unsealed — Facebook Teasers, Carousels & Viral Polls
+
+on:
+  # Triggered via cron-job.org (graceful no-op until FB_PAGE_ID & FB_PAGE_ACCESS_TOKEN secrets exist):
+  #   - teaser_doc  : 1080x1350 Cinema Premiere Teaser ~2h BEFORE Full Documentary
+  #   - teaser_reel : 1080x1350 Suspense Countdown Poster ~2h BEFORE Peak Daily Reel
+  #   - carousel    : 4-Slide 1080x1350 Declassified Dossier Mini-Story Carousel
+  #   - text        : Nightly Historical Debate Poll + Next Documentary Sneak Peek
+  #   - welcome     : Official Page Launch Welcome Post + 4-Slide Brand Showcase
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Facebook engagement or teaser post type'
+        required: true
+        default: 'teaser_doc'
+        type: choice
+        options:
+          - 'teaser_doc'
+          - 'teaser_reel'
+          - 'carousel'
+          - 'text'
+          - 'welcome'
+      dry_run:
+        description: 'Dry run only (render without publishing to Facebook)'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: history-unsealed-fb-social-${{ github.event.inputs.mode || 'teaser_doc' }}
+  cancel-in-progress: false
+
+jobs:
+  publish-fb-engagement:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -q pillow requests
+
+      - name: Generate & Publish Facebook Teaser / Engagement Post
+        env:
+          FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
+          FB_PAGE_ACCESS_TOKEN: ${{ secrets.FB_PAGE_ACCESS_TOKEN }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        run: |
+          ARGS="--mode ${{ github.event.inputs.mode || 'teaser_doc' }}"
+          if [ "${{ github.event.inputs.dry_run || 'false' }}" = "true" ]; then
+            ARGS="$ARGS --dry-run"
+          fi
+          python3 fb_social_autopilot_v21.py $ARGS

@@ -47,6 +47,7 @@ from renderer_v20_cinema import (
     generate_v20_thumbnail,
 )
 from uploader_v15 import upload_video_to_youtube, send_telegram
+from publisher_facebook_v21 import upload_fb_long_video
 
 SSL_CTX = ssl.create_default_context()
 UA = "UnsealedArchivesV20/2.5 (https://youtube.com/@behindthecurtainworld)"
@@ -816,6 +817,10 @@ def main():
 
     if not dry:
         vid_id = upload_video_to_youtube(master_mp4, yt_title, yt_desc, doc_script["tags"], privacy=privacy, thumbnail_path=thumb_jpg)
+        try:
+            upload_fb_long_video(master_mp4, yt_title, yt_desc, thumb_path=thumb_jpg)
+        except Exception as _fe:
+            print(f"[FB LONG DOC] Non-fatal cross-post warning: {_fe}", flush=True)
         os.makedirs("state", exist_ok=True)
         lf_p = "state/longform_log.json"
         hist = json.load(open(lf_p)) if os.path.exists(lf_p) else []
