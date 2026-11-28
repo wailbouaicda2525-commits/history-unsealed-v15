@@ -7,6 +7,10 @@ on:
         description: 'Dry run only (render without updating YouTube thumbnails)'
         required: false
         default: 'false'
+      only_video_id:
+        description: 'Optional single YouTube video ID to update'
+        required: false
+        default: ''
 
 jobs:
   retrofit-v21-thumbnails:
@@ -26,7 +30,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Retrofit ALL Existing YouTube Thumbnails to V21 Unified Style
+      - name: Retrofit Existing YouTube Thumbnails to V21 Unified Style
         env:
           YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
           YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
@@ -34,5 +38,6 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+          ONLY_VIDEO_ID: ${{ github.event.inputs.only_video_id || '' }}
         run: |
           python3 retrofit_thumbnails_v21.py --work-dir /tmp/v21_retrofit

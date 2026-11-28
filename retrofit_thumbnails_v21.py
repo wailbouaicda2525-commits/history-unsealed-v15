@@ -166,6 +166,15 @@ CURATED_VIDEO_SPECS = {
         "stamp": "UNSEALED",
         "teaser": "INSIDE THE IRAN-CONTRA SCANDAL",
     },
+    "n3U2rHCqLts": {
+        "wiki": ["RMS Titanic", "Sinking of the Titanic"],
+        "prefer_lead": True,
+        "white": "THE FATAL",
+        "red": "14 MINUTES",
+        "pill": "APR 1912",
+        "stamp": "ARCHIVE FILE",
+        "teaser": "WHY THE TITANIC REALLY SANK",
+    },
 }
 
 
@@ -352,20 +361,24 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dry-run", action="store_true", help="Render miniatures locally without calling YouTube API")
     ap.add_argument("--only-curated", action="store_true", help="Dry-run test curated videos for this channel")
+    ap.add_argument("--only-id", default="", help="Optional: update only this exact YouTube video ID")
     ap.add_argument("--work-dir", default="/tmp/v21_retrofit")
     args = ap.parse_args()
 
     os.makedirs(args.work_dir, exist_ok=True)
     dry = args.dry_run or (os.environ.get("DRY_RUN", "false").lower() == "true")
+    only_id = (args.only_id or os.environ.get("ONLY_VIDEO_ID", "")).strip()
 
     if dry and args.only_curated:
         ch1_ids = ["slZHuN2oS1M", "UFASu1GdEXU", "GVDungL64vA", "kXm0hXh7UlQ", "BEd7cVf__bk", "ThjCOZuwY9Q", "38E1tY_YJuE", "DosLi1gUL24", "3Vo8RHfifHc"]
-        ch2_ids = ["NJxEgi5Fhwo", "bU53ZBgVAsg", "X1F3kfpiSR0", "wEZIR5kjd08", "kNAYEIgYFxg", "cB4sljOHqo4", "YncrLOYQhDA", "4YLrH9wTdr0"]
+        ch2_ids = ["NJxEgi5Fhwo", "bU53ZBgVAsg", "X1F3kfpiSR0", "wEZIR5kjd08", "kNAYEIgYFxg", "cB4sljOHqo4", "YncrLOYQhDA", "4YLrH9wTdr0", "n3U2rHCqLts"]
         vids = [(vid, CURATED_VIDEO_SPECS[vid]["teaser"]) for vid in (ch1_ids if is_btc else ch2_ids)]
         yt = None
     else:
         yt = get_youtube_service()
         ch_title, vids = list_all_channel_videos(yt)
+        if only_id:
+            vids = [(vid, t) for vid, t in vids if vid == only_id]
         print(f"=== V21 MINIATURE RETROFIT: {brand} ({ch_title}) — {len(vids)} videos found ===")
 
     MediaFileUpload = None
