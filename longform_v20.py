@@ -94,13 +94,20 @@ DAILY_ARCHIVE_LONGFORM_CATALOG = [
 OUTLINE_SYSTEM_PROMPT_V20 = """You are the executive showrunner for a flagship Netflix / Warnoctis / LEMMiNO / Johnny Harris style long-form YouTube history documentary channel targeting Tier-1 US audiences.
 Given a verified historical topic and its real Wikipedia section map, design a gripping multi-chapter documentary blueprint with the EXACT target chapter count requested.
 Each chapter title MUST read like a compelling clickable YouTube chapter on the timeline (e.g. 'The buses on the hill', 'Six seconds in Dallas', 'The secret cable snaps', 'Adenauer in Moscow' — vivid, concrete, chronological!).
+
+VIRAL CTR THUMBNAIL + TITLE SYNERGY RULES:
+- `thumb_white` + `thumb_red` MUST total ONLY 3 to 4 GIANT PUNCHY WORDS (never a full sentence, never repeating the YouTube title!).
+- Create an irresistible curiosity gap between the YouTube title and the 3-4 word miniature headline!
+- `thumb_teaser` is a razor-sharp 3-5 word curiosity strip for the bottom of the thumbnail (<= 34 chars, ALL CAPS, e.g. 'BURIED FOR 40 YEARS' or 'THE UNTOLD TRUE ARCHIVE').
+
 Return ONLY valid JSON:
 {
   "video_title": "High-CTR US YouTube Documentary Title 48-76 chars (complete words, curiosity gap, authoritative)",
-  "thumb_white": "FIRST 2-3 WHITE WORDS OF VIRAL SPLIT-SCREEN THUMBNAIL (ALL CAPS, e.g. 'THE WALL CAME')",
-  "thumb_red": "1-2 EXPLOSIVE RED POWER WORDS AT END OF THUMBNAIL (ALL CAPS, e.g. 'OVERNIGHT')",
-  "thumb_stamp": "SHORT RED ARCHIVAL STAMP <= 16 chars (ALL CAPS, e.g. 'CIA ARCHIVE' or 'DECLASSIFIED')",
-  "thumb_pill": "OPTIONAL YEAR/DATE TRANSITION <= 14 chars (e.g. '1968 -> 1974' or 'OCT 1962')",
+  "thumb_white": "FIRST 1-3 SHORT WHITE WORDS <= 16 chars (ALL CAPS, e.g. 'THE CIA STOLE A' or '3 SECONDS TO')",
+  "thumb_red": "1-2 EXPLOSIVE POWER WORDS <= 13 chars (ALL CAPS, e.g. 'SOVIET SUB' or 'EXTINCTION')",
+  "thumb_stamp": "SHORT ARCHIVAL STAMP <= 16 chars (ALL CAPS, e.g. 'CIA ARCHIVE' or 'DECLASSIFIED')",
+  "thumb_pill": "SHORT YEAR/DATE TAG <= 14 chars (e.g. '1968 -> 1974' or 'OCT 1962')",
+  "thumb_teaser": "CURIOSITY TEASER STRIP <= 34 chars (ALL CAPS, e.g. 'BURIED IN VAULTS FOR 40 YEARS')",
   "video_queries_broll": [
     "1-2 concrete visual nouns for Pixabay B-roll matching this EXACT era/setting",
     "1-2 concrete visual nouns for tension/atmosphere",
@@ -117,11 +124,13 @@ CHAPTER_SYSTEM_PROMPT_V20 = """You are writing ONE deep narrative chapter of a f
 RULES:
 1. STRICTLY factual and grounded in the provided verified historical dossier. Plain spoken English ONLY inside narration (NO brackets, NO stage directions, NO markdown, NO hashtags).
 2. Write 255 to 305 spoken words (~1.8 to 2.1 minutes spoken!) with vivid investigative storytelling, exact dates, real names, real numbers, human tension, and a smooth hook into the next chapter.
-3. Return ONLY valid JSON matching this EXACT schema:
+3. IF THIS IS CHAPTER 1 (OPENING CHAPTER): NEVER start with "Welcome", "In history", "On this day", or dry background! Start IMMEDIATELY with a 10-15 second Netflix In-Media-Res Cold Open — drop the viewer straight into the exact clock time, terrified room, or impossible turning point, create a massive open loop, and then pivot smoothly ("To understand how the world reached that terrifying second, we have to rewind...")!
+4. Return ONLY valid JSON matching this EXACT schema:
 {
   "chapter_title": "Vivid Clickable YouTube Chapter Title <= 40 chars",
   "hook_top": "2-3 WORD DRAMATIC CHAPTER SLAM (ALL CAPS)",
-  "hook_sub": "SHORT CONTEXT LINE <= 36 chars (ALL CAPS)",
+  "hook_sub": "SHORT CONTEXT LINE <= 32 chars (ALL CAPS)",
+  "hook_teaser": "CURIOSITY OPEN-LOOP STRIP <= 40 chars (ALL CAPS)",
   "newspaper_headline": "DRAMATIC 4-6 WORD ARCHIVE HEADLINE (ALL CAPS)",
   "narration": "255-305 word deeply engaging factual chapter narration in plain spoken English.",
   "polaroid_caption": "ARCHIVAL EVIDENCE CAPTION <= 42 chars (ALL CAPS)",
@@ -532,6 +541,7 @@ def _fallback_adaptive_script_v20(dossier):
         "thumb_red": _trim_words(wt[-1] if wt else str(dossier["year"]), 14).upper(),
         "thumb_stamp": "CIA ARCHIVE" if dossier["mode"] == "behind_the_curtain" else "HISTORY UNSEALED",
         "thumb_pill": str(dossier["year"]),
+        "thumb_teaser": "THE DECLASSIFIED ARCHIVAL FILE" if dossier["mode"] == "behind_the_curtain" else "FULL ARCHIVAL DOCUMENTARY",
         "video_queries_broll": [],
         "tags": ["history documentary", "full documentary", "us history", "cold war", "declassified", dossier["wiki_title"].lower(), str(dossier["year"])],
         "chapters": chapters,
@@ -597,15 +607,22 @@ def build_longform_script_v20(dossier):
     final_chapters = _dedupe_chapter_titles_v20(final_chapters)
     res = {
         "video_title": _clean_doc_title_v20(bp.get("video_title") or fb["video_title"], year=dossier["year"], max_c=92),
-        "thumb_white": _trim_words(bp.get("thumb_white") or fb["thumb_white"], 20).upper(),
+        "thumb_white": _trim_words(bp.get("thumb_white") or fb["thumb_white"], 18).upper(),
         "thumb_red": _trim_words(bp.get("thumb_red") or fb["thumb_red"], 14).upper(),
         "thumb_stamp": _trim_words(bp.get("thumb_stamp") or fb["thumb_stamp"], 16).upper(),
         "thumb_pill": _trim_words(bp.get("thumb_pill") or fb["thumb_pill"], 15).upper(),
+        "thumb_teaser": _trim_words(bp.get("thumb_teaser") or fb["thumb_teaser"], 36).upper(),
         "video_queries_broll": bp.get("video_queries_broll") or [],
         "tags": bp.get("tags") or fb["tags"],
         "chapters": final_chapters,
         "provider": prov or "v20-hybrid",
     }
+    # Propagate viral miniature headline & teaser onto Chapter 1 so Frame-0 Cold Open matches the miniature!
+    if res["chapters"]:
+        res["chapters"][0]["thumb_white"] = res["thumb_white"]
+        res["chapters"][0]["thumb_red"] = res["thumb_red"]
+        res["chapters"][0]["thumb_pill"] = res["thumb_pill"]
+        res["chapters"][0]["hook_teaser"] = res["chapters"][0].get("hook_teaser") or res["thumb_teaser"]
     tot_w = sum(len(c["narration"].split()) for c in res["chapters"])
     print(f"[V20.5 LONGFORM SCRIPT OK via {res['provider']}] '{res['video_title']}' | {n_ch} chapters | {tot_w} words (~{tot_w/150:.1f} min)")
     return res
@@ -773,7 +790,7 @@ def main():
         "-movflags", "+faststart", master_mp4,
     ], check=True)
 
-    # 🔥 GENERATE VIRAL SPLIT-SCREEN REAL-ARCHIVAL THUMBNAIL (auto-selects real archival people/photos!)
+    # 🔥 GENERATE V21 VIRAL HIGH-CTR REAL-ARCHIVAL MINIATURE (auto-selects real archival people/photos!)
     t_left, t_right = pick_best_thumb_photos(all_imgs)
     thumb_jpg = os.path.join(args.work_dir, "v20_viral_thumb_1280x720.jpg")
     generate_v20_thumbnail(
@@ -781,6 +798,7 @@ def main():
         doc_script["thumb_white"], doc_script["thumb_red"],
         doc_script["thumb_stamp"], thumb_jpg,
         center_pill=doc_script.get("thumb_pill"),
+        teaser=doc_script.get("thumb_teaser"),
     )
 
     yt_title = doc_script["video_title"][:98]

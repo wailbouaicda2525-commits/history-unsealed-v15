@@ -17,24 +17,32 @@ import urllib.request
 SSL_CTX = ssl.create_default_context()
 UA = "UnsealedArchivesV20/2.0 (https://youtube.com/@behindthecurtainworld)"
 
-SYSTEM_PROMPT_V20 = """You are the lead documentary showrunner writing for a high-RPM Tier-1 US YouTube audience (Johnny Harris x LEMMiNO x Fern x Netflix Cold War style).
-Given a verified historical event, write an electrifying 42-to-48 second documentary narration (110 to 124 words) strictly grounded in the provided facts, PLUS exact real-video search queries for our B-roll & archival film engine.
+SYSTEM_PROMPT_V20 = """You are the lead viral documentary showrunner writing for a high-RPM Tier-1 US YouTube audience (Johnny Harris x LEMMiNO x Fern x Netflix Cold War style).
+Given a verified historical event, write an electrifying 42-to-48 second documentary narration (110 to 124 words) strictly grounded in the provided facts, PLUS exact real-video search queries AND high-CTR YouTube Title + Thumbnail + 0-3s Hook synergy.
 
-RULES:
-1. FIRST 3 SECONDS MUST BE A BRUTAL SCROLL-STOPPING HOOK (no 'Welcome back', no 'Did you know', no fluff). Start right inside the tension, exact date, or shocking turning point!
-2. Crisp, cinematic spoken American documentary pacing. Short punchy sentences mixed with dramatic reveals. Plain spoken English ONLY (no emojis, no hashtags, no stage directions, no brackets).
-3. Return ONLY valid JSON with these exact keys:
+STRICT VIRAL HOOK RULES (FIRST 8 WORDS DECIDE 80% OF VIEWS!):
+1. NEVER start with dead clichés like "On this day", "For decades", "In history", "Welcome", "Did you know", "Today", "A single turning point", or "Have you ever wondered".
+2. OPEN INSIDE PEAK TENSION in the VERY FIRST SENTENCE using one of these 5 viral formulas:
+   - Countdown/Clock Stake: "Three seconds from nuclear war, one Russian officer refused the firing order."
+   - Impossible Secret/Price Tag: "The CIA spent $350 million building a fake ship just to steal a sunken Soviet submarine."
+   - Fatal 1-Second Mistake: "A single unlocked door in 1972 brought down the most powerful president on Earth."
+   - Buried Evidence Paradox: "For forty years, officials called this photo a hoax — until the vault opened."
+   - Shocking Scale/Survival: "At 5:12 AM, one crack beneath San Francisco erased an entire city in seventy-two hours."
+3. THUMBNAIL + TITLE CURIOSITY SYNERGY: The thumbnail text (`thumb_white` + `thumb_red`) MUST be 2-4 MASSIVE punchy words total (NEVER repeat the full title!). It must create an instant curiosity gap when paired with the YouTube title!
+4. Crisp, cinematic spoken American documentary pacing. Short punchy sentences mixed with dramatic reveals. Plain spoken English ONLY (no emojis, no hashtags, no stage directions, no brackets).
+5. Return ONLY valid JSON with these exact keys:
 {
   "title": "High-CTR US YouTube title <= 66 chars (curiosity gap, complete words, NO #Shorts)",
   "hook_top": "2-3 WORD GIANT COLD-OPEN HOOK (ALL CAPS, e.g. 'FIVE MINUTES TO WW3')",
-  "hook_sub": "SHORT CONTEXT LINE <= 36 chars (ALL CAPS, e.g. 'OCTOBER 27, 1962 • CUBAN BLOCKADE')",
+  "hook_sub": "SHORT CONTEXT LINE <= 32 chars (ALL CAPS, e.g. 'OCT 27, 1962 • CUBAN BLOCKADE')",
+  "hook_teaser": "GRIPPING CURIOSITY OPEN-LOOP LINE <= 40 chars (ALL CAPS, e.g. 'BURIED IN CIA VAULTS FOR 40 YEARS')",
   "newspaper_headline": "DRAMATIC 4-6 WORD VINTAGE NEWSPAPER HEADLINE (ALL CAPS)",
   "thumb_hook": "2-3 GIANT ALL-CAPS THUMBNAIL WORDS (e.g. 'ONE MAN STOPPED WW3')",
-  "thumb_white": "FIRST 2-3 WHITE WORDS OF VIRAL THUMBNAIL HEADLINE (ALL CAPS, e.g. 'THE CIA STOLE A')",
-  "thumb_red": "1-2 EXPLOSIVE RED POWER WORDS AT END OF THUMBNAIL HEADLINE (ALL CAPS, e.g. 'SOVIET SUB' or 'OVERNIGHT')",
+  "thumb_white": "1-3 SHORT WHITE WORDS FOR THUMBNAIL <= 16 chars (ALL CAPS, e.g. 'THE CIA STOLE A' or '3 SECONDS TO')",
+  "thumb_red": "1-2 EXPLOSIVE POWER WORDS <= 13 chars (ALL CAPS, e.g. 'SOVIET SUB' or 'WW3')",
   "thumb_stamp": "SHORT RED RUBBER STAMP BADGE <= 16 chars (ALL CAPS, e.g. 'CIA ARCHIVE' or 'DECLASSIFIED')",
-  "thumb_pill": "OPTIONAL YEAR/ERA TRANSITION <= 14 chars (e.g. '1968 -> 1974' or 'OCTOBER 1962')",
-  "narration": "110-124 word gripping factual documentary narration in plain English (must finish cleanly under 49 seconds so our 4-second 3D book collector outro shines).",
+  "thumb_pill": "SHORT YEAR/ERA TAG <= 14 chars (e.g. '1968 -> 1974' or 'OCT 1962')",
+  "narration": "110-124 word gripping factual documentary narration in plain English (must open with a brutal 0-3s hook and finish cleanly under 49 seconds).",
   "polaroid_caption": "Short archival evidence caption <= 42 chars (ALL CAPS)",
   "stamp_line1": "1-2 WORD RED STAMP (ALL CAPS, e.g. 'DECLASSIFIED' or 'TOP SECRET')",
   "stamp_line2": "SHORT SUB-STAMP <= 22 chars (ALL CAPS)",
@@ -189,19 +197,18 @@ def _deterministic_v20_fallback(ev):
     extra_txt = " ".join(extra_sents)
     if is_btc:
         narration = (
-            f"For decades, intelligence agencies buried what really happened in {ev['year']}. "
+            f"In {ev['year']}, one classified mission over {ev['location'].title()} was buried so deep even presidents weren't told the full truth. "
             f"{summary} {extra_txt} "
-            f"Coordinates locked over {ev['location'].title()} reveal how razor-thin the margin was between quiet survival and global catastrophe. "
-            f"When the classified files finally opened, one truth stunned historians: the official story was only half the picture. "
-            f"Subscribe to {cname.title()} for the next declassified file."
+            f"Satellite coordinates reveal how razor-thin the margin was between quiet survival and global disaster. "
+            f"When the vault finally opened, historians realized the official story was only half the picture. "
+            f"Subscribe to {cname.title()} for tomorrow's declassified file."
         )
     else:
         narration = (
-            f"On {ev['display_date']}, a single turning point rewrote modern history. "
+            f"One split-second decision in {ev['location'].title()} during {ev['year']} changed history forever — and almost nobody remembers how close it came to failing. "
             f"{summary} {extra_txt} "
-            f"In {ev['location'].title()}, witnesses saw events unfold that would echo for generations. "
-            f"Most textbooks compress this moment into one quiet paragraph — yet the real archival record is far more gripping. "
-            f"Subscribe to {cname.title()} for tomorrow's true historical file."
+            f"Textbooks bury this moment in a single quiet paragraph, yet the real archival record is far more intense. "
+            f"Subscribe to {cname.title()} for tomorrow's unsealed file."
         )
     words = narration.split()
     if len(words) > 136:
@@ -213,10 +220,15 @@ def _deterministic_v20_fallback(ev):
         raw_fb_title = f"{ev['year']}: {short_t}"
     return {
         "title": _clean_yt_title(raw_fb_title, 88),
-        "hook_top": _trim_words(f"DECLASSIFIED {ev['year']}" if is_btc else f"{ev['year']} TURNING POINT", 22).upper(),
-        "hook_sub": _trim_words(f"{ev['display_date']} • {ev['location']}", 36).upper(),
+        "hook_top": _trim_words(f"DECLASSIFIED {ev['year']}" if is_btc else f"UNTOLD {ev['year']}", 22).upper(),
+        "hook_sub": _trim_words(f"{ev['display_date']} • {ev['location']}", 32).upper(),
+        "hook_teaser": "BURIED IN CLASSIFIED FILES FOR DECADES" if is_btc else "THE TRUE RECORD TEXTBOOKS LEFT OUT",
         "newspaper_headline": _trim_words(f"{ev['year']}: {short_t}", 36).upper(),
         "thumb_hook": _trim_words(f"SECRET {ev['year']}" if is_btc else f"UNTOLD {ev['year']}", 18).upper(),
+        "thumb_white": _trim_words("THEY HID THIS" if is_btc else "HISTORY HID", 16).upper(),
+        "thumb_red": str(ev["year"]),
+        "thumb_stamp": "CIA ARCHIVE" if is_btc else "UNSEALED",
+        "thumb_pill": str(ev["year"]),
         "narration": narration,
         "polaroid_caption": _trim_words(f"ARCHIVE FILE • {short_t}", 40).upper(),
         "stamp_line1": "TOP SECRET" if is_btc else "VERIFIED",
@@ -273,8 +285,9 @@ def write_script_v20(ev):
 
     # Sanitize lengths (V20.7.2: allow up to 88 chars so complete titles NEVER drop final nouns before #Shorts!)
     out["title"] = _clean_yt_title(out["title"], 88)
-    out["hook_top"] = _trim_words(out["hook_top"], 24).upper()
-    out["hook_sub"] = _trim_words(out["hook_sub"], 38).upper()
+    out["hook_top"] = _trim_words(out["hook_top"], 22).upper()
+    out["hook_sub"] = _trim_words(out["hook_sub"], 34).upper()
+    out["hook_teaser"] = _trim_words(out.get("hook_teaser") or fb["hook_teaser"], 42).upper()
     out["newspaper_headline"] = _trim_words(out["newspaper_headline"], 42).upper()
     out["thumb_hook"] = _trim_words(out["thumb_hook"], 22).upper()
     if not out.get("thumb_white") or not out.get("thumb_red"):
@@ -285,7 +298,7 @@ def write_script_v20(ev):
         else:
             out["thumb_white"] = out["thumb_hook"]
             out["thumb_red"] = str(ev["year"])
-    out["thumb_white"] = _trim_words(out["thumb_white"], 20).upper()
+    out["thumb_white"] = _trim_words(out["thumb_white"], 18).upper()
     out["thumb_red"] = _trim_words(out["thumb_red"], 14).upper()
     out["thumb_stamp"] = _trim_words(out.get("thumb_stamp") or ("CIA ARCHIVE" if ev.get("mode") == "behind_the_curtain" else "HISTORY UNSEALED"), 16).upper()
     out["thumb_pill"] = _trim_words(out.get("thumb_pill") or str(ev["year"]), 15).upper()

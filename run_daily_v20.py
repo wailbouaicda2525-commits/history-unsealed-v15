@@ -15,7 +15,7 @@ from scout_v15 import scout_event
 from scriptwriter_v20 import write_script_v20
 from video_scout_v20 import scout_real_videos_v20
 from voice_engine_v15 import synthesize_voice_v15, mix_cinema_audio_v15
-from renderer_v20_cinema import render_v20_cinema
+from renderer_v20_cinema import render_v20_cinema, pick_best_thumb_photos, generate_v20_thumbnail
 from uploader_v15 import upload_video_to_youtube, send_telegram
 
 
@@ -88,6 +88,22 @@ def main():
         show_outro=True, show_midroll_ad=True,
     )
 
+    # 🔥 V21: Generate high-CTR 1280x720 Viral Miniature for Desktop/Channel/Search Shorts display!
+    t_hero, t_sec = pick_best_thumb_photos(ev.get("images", []))
+    short_thumb = os.path.join(work_dir, "short_v21_thumb_1280x720.jpg")
+    if t_hero:
+        generate_v20_thumbnail(
+            t_hero, t_sec, cfg["channel_name"],
+            script.get("thumb_white", script["hook_top"]),
+            script.get("thumb_red", str(ev["year"])),
+            script.get("thumb_stamp", "CIA ARCHIVE" if cfg["mode"] == "behind_the_curtain" else "UNSEALED"),
+            short_thumb,
+            center_pill=script.get("thumb_pill") or str(ev["year"]),
+            teaser=script.get("hook_teaser") or script.get("hook_sub"),
+        )
+    else:
+        short_thumb = None
+
     yt_title = f"{script['title']} #Shorts"
     if len(yt_title) > 100:
         yt_title = script["title"][:91].rsplit(" ", 1)[0] + " #Shorts"
@@ -105,10 +121,10 @@ def main():
     if dry:
         print(f"[DRY RUN V20] Skipping YouTube upload. Title={yt_title}")
         print(f"[DRY RUN V20] Real Video Sources: {[c['source'] for c in video_clips]}")
-        print(f"[DRY RUN V20] Output MP4={args.out_mp4} | QA={args.qa_out}")
+        print(f"[DRY RUN V20] Output MP4={args.out_mp4} | Thumb={short_thumb} | QA={args.qa_out}")
         return
 
-    vid = upload_video_to_youtube(args.out_mp4, yt_title, yt_desc, tags, privacy=privacy)
+    vid = upload_video_to_youtube(args.out_mp4, yt_title, yt_desc, tags, privacy=privacy, thumbnail_path=short_thumb)
     os.makedirs("state", exist_ok=True)
     hp = "state/history_log.json"
     hist = json.load(open(hp)) if os.path.exists(hp) else []

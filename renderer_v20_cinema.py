@@ -582,6 +582,9 @@ def render_v20_cinema(ev, script, voice_dur, words, audio_m4a, env30, spec30, ou
         odr.text((rx, 536), "SAVE 33% WITH THE 2-BOOK COLLECTOR'S BUNDLE (174 PAGES)", fill=(248, 208, 86, 255), font=f_m20, anchor="lm")
         odr.text((rx, 594), f"UNSEALED ARCHIVES PRESS  •  SUBSCRIBE TO {brand}", fill=(166, 174, 192, 235), font=f_m18, anchor="lm")
 
+    # 🔥 V21 VIRAL COLD-OPEN HOOK CARD (Pre-built once -> instant Frame-0 clarity + zero per-frame PIL lag!)
+    hook_card_v21 = _build_v21_hook_overlay(W, H, ev, script, is_btc, vertical=vertical)
+
     cues = build_subtitle_cues(words, speech_off, vertical=vertical)
     sub_cache = SubCacheV20(cues, vertical=vertical)
     bounds = [0.0, 0.22, 0.44, 0.64, 0.82, 1.0]
@@ -590,35 +593,41 @@ def render_v20_cinema(ev, script, voice_dur, words, audio_m4a, env30, spec30, ou
 
     def render_scene(si, p, t, fi):
         if si == 0:
-            # ACT 0:
-            #  0..45% -> EXPLOSIVE 3-SECOND REAL-VIDEO COLD OPEN HOOK (moving footage immediately!)
+            # ACT 0 (V21 VIRAL HOOK):
+            #  0..45% -> INSTANT FRAME-0 VIRAL VISUAL HOOK + MOVING B-ROLL + IMPACT SLAM + FLARE SWEEP!
             #  45..70% -> 3D Earth Globe Orbital Drop
             #  70..100% -> Dark Esri Tactical Map + Live Radar + Animated Glowing Mission Vector Arc!
             if p < 0.45:
                 q = p / 0.45
-                fr, meta = get_real_video_or_photo(b0, fi, q, darken=0.84, micro_zoom=0.06)
+                fr, meta = get_real_video_or_photo(b0, fi, q, darken=0.72, micro_zoom=0.07)
                 if meta.get("is_archival"):
                     fr = draw_archival_film_overlay(fr, vertical=vertical)
-                # Dynamic cold-open kinetic slam!
-                pa = ease_out(min(1.0, t / 0.22)) * ease_out(min(1.0, (1.0 - q) / 0.16))
-                sc_k = 1.48 - 0.48 * ease_out(min(1.0, t / 0.26))
-                if 0.08 <= t < 0.36:
-                    dt = t - 0.08; amp = 18.0 * math.exp(-dt / 0.07)
+                # Frame-0 (t < 0.08s) is 100% CRISP & VISIBLE (alpha=1.0, scale=1.0) so YouTube Shorts
+                # auto-frame picker ALWAYS captures a viral cover miniature! Then smooth punch-in & exit!
+                if t < 0.08:
+                    pa = 1.0
+                    sc_k = 1.0
+                else:
+                    exit_fade = ease_out(min(1.0, (1.0 - q) / 0.16))
+                    pa = exit_fade
+                    # Subtle kinetic breathing zoom during hook hold
+                    punch = 0.055 * math.sin(min(1.0, (t - 0.08) / 0.24) * math.pi)
+                    sc_k = 1.0 + punch + 0.025 * q
+                if 0.08 <= t < 0.34:
+                    dt = t - 0.08; amp = 14.0 * math.exp(-dt / 0.07)
                     fr = cv2.warpAffine(fr, np.float32([[1, 0, amp * math.sin(dt * 120)], [0, 1, amp * math.cos(dt * 95)]]), (W, H))
-                yr_show = ev["year"] - int(max(0, (0.75 - t) * 44)) if t < 0.75 else ev["year"]
-                ui = Image.new("RGBA", (W, 470), (0, 0, 0, 0)); dr = ImageDraw.Draw(ui)
-                # Dark cinematic gradient strip behind hook for 100% razor contrast over moving video
-                dr.rounded_rectangle([60, 20, W - 60, 445], radius=18, fill=(8, 10, 16, 178), outline=(228, 34, 42, 220), width=3)
-                dr.text((W // 2, 72), script.get("hook_sub", ev["display_date"])[:36], fill=(248, 206, 72, 255), font=f_m24, anchor="mm")
-                dr.text((W // 2 + 4, 184), str(yr_show), fill=(0, 0, 0, 230), font=f_huge, anchor="mm")
-                dr.text((W // 2, 178), str(yr_show), fill=(254, 250, 244, 255), font=f_huge, anchor="mm")
-                dr.text((W // 2, 314), script.get("hook_top", ev["location"])[:24], fill=(248, 206, 72, 255), font=f_hook, anchor="mm")
-                bar = int((W * 0.56) * ease_out(min(1.0, t / 0.55)))
-                dr.rectangle([W // 2 - bar // 2, 384, W // 2 + bar // 2, 394], fill=(228, 34, 42, 255))
-                fr = comp_pil(fr, ui, W / 2.0, H * (0.44 if vertical else 0.48), scale=sc_k, alpha=pa)
-                if 0.10 < q < 0.75:
-                    fl_p = (q - 0.10) / 0.65
-                    fr = add_anamorphic_flare(fr, int(H * 0.44), int(W * fl_p), intensity=0.58 * math.sin(math.pi * fl_p), color_bgr=(65, 195, 255))
+                cy_hook = H * (0.435 if vertical else 0.495)
+                fr = comp_pil(fr, hook_card_v21, W / 2.0, cy_hook, scale=sc_k, alpha=pa)
+                # Animated crimson/gold progress sweep bar right beneath the hook card
+                if pa > 0.15:
+                    bw_bar = int((W * (0.64 if vertical else 0.46)) * min(1.0, max(0.18, q * 1.15)))
+                    by_bar = int(cy_hook + hook_card_v21.height * 0.50 - 22)
+                    bar_col = (44, 42, 238) if is_btc else (62, 204, 250)
+                    cv2.rectangle(fr, (W // 2 - bw_bar // 2, by_bar), (W // 2 + bw_bar // 2, by_bar + 7), bar_col, -1)
+                if 0.12 < q < 0.72:
+                    fl_p = (q - 0.12) / 0.60
+                    fl_col = (52, 82, 255) if is_btc else (58, 198, 255)
+                    fr = add_anamorphic_flare(fr, int(H * (0.43 if vertical else 0.48)), int(W * fl_p), intensity=0.52 * math.sin(math.pi * fl_p), color_bgr=fl_col)
                 return fr
             elif p < 0.70:
                 # 3D REAL SATELLITE EARTH ORBITAL DROP (vivid Esri Satellite Globe + blue atmospheric Fresnel glow!)
@@ -1136,26 +1145,33 @@ def pick_best_thumb_photos(img_paths):
     return best_left, best_right
 
 
-def _frame_subject_right(img_path, W, H):
-    """Load real archival photo, strip museum caption bars, enhance clarity, and frame face/subject cleanly at right."""
-    im = cv2.imread(img_path)
-    if im is None:
-        return np.full((H, W, 3), (20, 22, 28), dtype=np.uint8)
+def _strip_white_borders(im):
+    """Auto-trim bright white museum / Bundesarchiv bottom/side caption borders cleanly."""
     ih, iw = im.shape[:2]
-
-    # Auto-trim white museum/Bundesarchiv bottom caption strips if present
-    cut_y = ih
-    for yy in range(ih - 1, max(1, int(ih * 0.86)), -1):
-        if float(im[yy].mean()) > 235.0:
-            cut_y = yy
+    cut_b = ih
+    for yy in range(ih - 1, max(1, int(ih * 0.84)), -1):
+        if float(im[yy].mean()) > 232.0:
+            cut_b = yy
         else:
             break
-    if cut_y < ih - 4:
-        im = im[:max(100, cut_y - 4), :]
+    if cut_b < ih - 4:
+        im = im[:max(100, cut_b - 4), :]
         ih, iw = im.shape[:2]
+    cut_t = 0
+    for yy in range(0, min(ih - 1, int(ih * 0.10))):
+        if float(im[yy].mean()) > 238.0:
+            cut_t = yy + 1
+        else:
+            break
+    if cut_t > 4:
+        im = im[cut_t + 2:, :]
+    return im
 
-    cx_norm, cy_norm = 0.50, (0.28 if ih > iw else 0.36)
-    has_face = False
+
+def _detect_primary_subject(im):
+    """Return (cx_norm, cy_norm, has_face) using Haar frontal face detection."""
+    ih, iw = im.shape[:2]
+    cx_norm, cy_norm, has_face = 0.50, (0.30 if ih > iw else 0.40), False
     try:
         gray = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
         casc_p = os.path.join(cv2.data.haarcascades, "haarcascade_frontalface_default.xml")
@@ -1164,56 +1180,268 @@ def _frame_subject_right(img_path, W, H):
             if len(faces) > 0:
                 fx, fy, fw, fh = sorted(faces, key=lambda f: f[2] * f[3], reverse=True)[0]
                 cx_norm = (fx + fw * 0.50) / float(iw)
-                cy_norm = (fy + fh * 0.44) / float(ih)
+                cy_norm = (fy + fh * 0.42) / float(ih)
                 has_face = True
     except Exception:
         pass
+    return cx_norm, cy_norm, has_face
 
-    # For tall portrait archival photos (e.g., 578x800 Bundesarchiv standing figure/tunnel),
-    # avoid 2.5x zoom that slices off heads/ceilings — fit height cleanly on right ~64% over obsidian backdrop!
-    if ih > iw * 1.05:
-        sc = (H / float(ih)) * 1.06
-        nw = max(int(W * 0.58), int(round(iw * sc)))
-        nh = max(H, int(round(ih * sc)))
-        rs = cv2.resize(im, (nw, nh), interpolation=cv2.INTER_LANCZOS4)
-        y0 = max(0, min(nh - H, int(cy_norm * nh - H * 0.36) if has_face else int((nh - H) * 0.14)))
-        if nw >= W:
-            x0 = max(0, min(nw - W, int(cx_norm * nw - W * 0.68)))
-            crop = rs[y0:y0 + H, x0:x0 + W]
+
+def _draw_soft_shadow_text(im_rgba, pos, text, font, fill, anchor="la", shadow_alpha=215, offset=(0, 6), blur_r=9):
+    """Render ultra-clean Netflix-grade soft multi-pass drop shadow text (zero muddy cartoon borders!)."""
+    layer = Image.new("RGBA", im_rgba.size, (0, 0, 0, 0))
+    ldr = ImageDraw.Draw(layer)
+    ox, oy = offset
+    ldr.text((pos[0] + ox, pos[1] + oy), text, font=font, fill=(0, 0, 0, shadow_alpha), anchor=anchor)
+    layer = layer.filter(ImageFilter.GaussianBlur(radius=blur_r))
+    im_rgba.alpha_composite(layer)
+    dr = ImageDraw.Draw(im_rgba)
+    dr.text((pos[0] + 2, pos[1] + 3), text, font=font, fill=(0, 0, 0, 175), anchor=anchor)
+    dr.text(pos, text, font=font, fill=fill, anchor=anchor)
+
+
+def _draw_rubber_stamp_badge(text, color_rgba=(255, 72, 76, 252), angle=11.0):
+    """Crisp angled archival rubber stamp (CIA / DECLASSIFIED / UNSEALED) legible on both dark & light photos."""
+    txt = str(text or "DECLASSIFIED").strip().upper()[:16]
+    f_st = load_font(FONT_MONO, 25, 700)
+    tmp = ImageDraw.Draw(Image.new("RGBA", (10, 10)))
+    tw = int(tmp.textlength(txt, font=f_st))
+    sw, sh = tw + 48, 58
+    st = Image.new("RGBA", (sw, sh), (0, 0, 0, 0))
+    sdr = ImageDraw.Draw(st)
+    bg_fill = (12, 10, 14, 218)
+    sdr.rounded_rectangle([2, 2, sw - 3, sh - 3], radius=8, fill=bg_fill, outline=color_rgba, width=4)
+    sdr.rounded_rectangle([8, 8, sw - 9, sh - 9], radius=5, outline=(color_rgba[0], color_rgba[1], color_rgba[2], 165), width=1)
+    sdr.text((sw // 2, sh // 2), txt, font=f_st, fill=color_rgba, anchor="mm")
+    return st.rotate(angle, expand=True, resample=Image.BICUBIC)
+
+
+def _build_v21_hook_overlay(W, H, ev, script, is_btc, vertical=True):
+    """
+    🔥 V21 VIRAL COLD-OPEN HOOK OVERLAY (Frame-0 100% Crisp Miniature + 0-3s Scroll-Stopper)!
+    - 9:16 SHORTS: Real archival hero evidence frame + branded top pill + giant 2-tone viral power
+      headline + shocking curiosity teaser strip, locked cleanly inside YouTube Shorts' safe zone!
+    - 16:9 LONG-FORM: Sleek cinema documentary title-hook opener matching the viral miniature!
+    """
+    raw_w = script.get("thumb_white") or script.get("hook_top") or ev.get("location", "SECRET FILE")
+    raw_r = script.get("thumb_red") or str(ev.get("year", ""))
+    l1, l2, l3 = _split_headline_lines(raw_w, raw_r)
+    yr_pill = str(script.get("thumb_pill") or ev.get("year") or "").replace("->", "–").strip().upper()[:16]
+    teaser = str(script.get("hook_teaser") or script.get("hook_sub") or ev.get("display_date") or "").strip().upper()[:42]
+    stamp_txt = str(script.get("thumb_stamp") or ("DECLASSIFIED" if is_btc else "UNSEALED")).strip().upper()[:16]
+
+    accent_rgb = (228, 32, 38) if is_btc else (246, 198, 62)
+    accent_text = (255, 252, 248, 255) if is_btc else (14, 16, 22, 255)
+    eyebrow_txt = (f"DECLASSIFIED  •  {yr_pill}" if is_btc else f"HISTORY UNSEALED  •  {yr_pill}")[:32]
+
+    if vertical:
+        cw, ch = 960, 1020
+        card = Image.new("RGBA", (cw, ch), (0, 0, 0, 0))
+        dr = ImageDraw.Draw(card)
+
+        # Frosted obsidian dossier shell with channel accent border
+        border_col = (228, 36, 42, 225) if is_btc else (244, 196, 68, 225)
+        dr.rounded_rectangle([14, 14, cw - 14, ch - 14], radius=24, fill=(9, 11, 17, 212), outline=border_col, width=3)
+        dr.rounded_rectangle([26, 26, cw - 26, ch - 26], radius=18, outline=(255, 255, 255, 42), width=1)
+
+        # 1) Top Branded Eyebrow Pill
+        f_eye = load_font(FONT_MONO, 24, 700)
+        ew = int(dr.textlength(eyebrow_txt, font=f_eye)) + 52
+        ex0 = (cw - ew) // 2
+        if is_btc:
+            dr.rounded_rectangle([ex0, 42, ex0 + ew, 88], radius=8, fill=(218, 28, 34, 255))
+            dr.text((cw // 2, 65), eyebrow_txt, font=f_eye, fill=(255, 252, 248, 255), anchor="mm")
         else:
-            # Place crisp portrait cleanly on the right side & smoothly feather left edge into blurred dark backdrop
-            bg_fill = cv2.GaussianBlur(cv2.resize(im, (W, H), interpolation=cv2.INTER_AREA), (65, 65), 0)
-            bg_fill = np.clip(bg_fill.astype(np.float32) * 0.28, 0, 255).astype(np.uint8)
-            patch = rs[y0:y0 + H, :nw]
-            px0 = W - nw
-            feath = min(140, max(48, nw // 5))
-            alpha = np.ones((H, nw, 1), dtype=np.float32)
-            alpha[:, :feath, 0] = np.linspace(0.0, 1.0, feath, dtype=np.float32)[None, :]
-            roi = bg_fill[:, px0:W].astype(np.float32)
-            bg_fill[:, px0:W] = np.clip(patch.astype(np.float32) * alpha + roi * (1.0 - alpha), 0, 255).astype(np.uint8)
-            crop = bg_fill
-    else:
-        sc = max(W / float(iw), H / float(ih)) * 1.10
-        nw, nh = max(W, int(round(iw * sc))), max(H, int(round(ih * sc)))
-        rs = cv2.resize(im, (nw, nh), interpolation=cv2.INTER_LANCZOS4)
-        target_x = int(cx_norm * nw - W * 0.68)
-        target_y = int(cy_norm * nh - H * 0.44)
-        if target_x < 0:
-            pad_l = min(int(W * 0.28), -target_x)
-            rs = cv2.copyMakeBorder(rs, 0, 0, pad_l, 0, cv2.BORDER_REPLICATE)
-            nw = rs.shape[1]
-            target_x = max(0, target_x + pad_l)
-        x0 = max(0, min(nw - W, target_x))
-        y0 = max(0, min(nh - H, target_y))
-        crop = rs[y0:y0 + H, x0:x0 + W]
+            dr.rounded_rectangle([ex0, 42, ex0 + ew, 88], radius=8, fill=(18, 22, 34, 248), outline=(246, 198, 62, 245), width=2)
+            dr.text((cw // 2, 65), eyebrow_txt, font=f_eye, fill=(248, 206, 74, 255), anchor="mm")
 
-    # CLAHE micro-detail + unsharp clarity
-    lab = cv2.cvtColor(crop, cv2.COLOR_BGR2LAB)
+        # 2) Framed Real Archival Hero Evidence Window (instant visual proof at t=0.00s!)
+        pw, ph = 820, 395
+        px0, py0 = (cw - pw) // 2, 112
+        best_img = None
+        if ev.get("images"):
+            best_img, _ = pick_best_thumb_photos(ev["images"])
+        if best_img and os.path.exists(best_img):
+            im_bgr = _smart_subject_crop(best_img, pw, ph, is_right=not is_btc)
+            ev_pil = Image.fromarray(cv2.cvtColor(im_bgr, cv2.COLOR_BGR2RGB)).convert("RGBA")
+        else:
+            ev_pil = Image.new("RGBA", (pw, ph), (24, 28, 38, 255))
+        # Rounded mask + subtle inner bottom gradient for evidence polish
+        mask = Image.new("L", (pw, ph), 0)
+        ImageDraw.Draw(mask).rounded_rectangle([0, 0, pw - 1, ph - 1], radius=16, fill=255)
+        card.paste(ev_pil, (px0, py0), mask)
+        dr = ImageDraw.Draw(card)
+        dr.rounded_rectangle([px0, py0, px0 + pw, py0 + ph], radius=16, outline=(255, 255, 255, 115), width=2)
+        # Tactical corner brackets around archival proof photo
+        b_col = (238, 42, 46, 255) if is_btc else (248, 204, 70, 255)
+        cl = 26
+        for (bx, by, sx, sy) in [
+            (px0 - 6, py0 - 6, 1, 1),
+            (px0 + pw + 6, py0 - 6, -1, 1),
+            (px0 - 6, py0 + ph + 6, 1, -1),
+            (px0 + pw + 6, py0 + ph + 6, -1, -1),
+        ]:
+            dr.line([(bx, by), (bx + sx * cl, by)], fill=b_col, width=4)
+            dr.line([(bx, by), (bx, by + sy * cl)], fill=b_col, width=4)
+
+        # Tilted archival rubber stamp tucked cleanly on top-right edge of photo
+        st_im = _draw_rubber_stamp_badge(stamp_txt, color_rgba=(238, 44, 48, 240) if is_btc else (248, 204, 72, 242), angle=-9.0)
+        card.alpha_composite(st_im, (px0 + pw - st_im.width + 14, py0 - 16))
+        dr = ImageDraw.Draw(card)
+
+        # 3) Massive Two-Tone Viral Power Headline (below photo!)
+        white_lines = [s for s in (l1, l2) if s]
+        y_cur = py0 + ph + (28 if len(white_lines) >= 2 else 54)
+        for wl in white_lines:
+            fsz = 102
+            f_use = load_font(FONT_SANS, fsz, 800)
+            while fsz >= 52 and dr.textlength(wl, font=f_use) > cw - 96:
+                fsz -= 4
+                f_use = load_font(FONT_SANS, fsz, 800)
+            _draw_soft_shadow_text(card, (cw // 2, y_cur + fsz // 2), wl, f_use, (254, 252, 248, 255), anchor="mm", blur_r=8)
+            y_cur += int(fsz * 1.05)
+
+        # Blazing Power Climax Ribbon Block
+        hl_txt = l3 or yr_pill or "DECLASSIFIED"
+        fsz_h = 90
+        f_hl = load_font(FONT_SANS, fsz_h, 800)
+        while fsz_h >= 48 and dr.textlength(hl_txt, font=f_hl) > cw - 140:
+            fsz_h -= 4
+            f_hl = load_font(FONT_SANS, fsz_h, 800)
+        rw = int(dr.textlength(hl_txt, font=f_hl)) + 58
+        rh = int(fsz_h * 1.26)
+        ry = min(ch - 146 - rh, y_cur + 14)
+        dr = ImageDraw.Draw(card)
+        dr.rounded_rectangle([(cw - rw) // 2, ry, (cw + rw) // 2, ry + rh], radius=12, fill=(*accent_rgb, 255))
+        if is_btc:
+            dr.line([(cw - rw) // 2 + 12, ry + 3, (cw + rw) // 2 - 12, ry + 3], fill=(255, 212, 92, 220), width=3)
+        dr.text((cw // 2, ry + rh // 2), hl_txt, font=f_hl, fill=accent_text, anchor="mm")
+
+        # 4) Curiosity Open-Loop Teaser Strip
+        f_ts = load_font(FONT_MONO, 25, 700)
+        tw_t = int(dr.textlength(teaser, font=f_ts))
+        while tw_t > cw - 110 and len(teaser) > 16:
+            teaser = teaser[:-1]
+            tw_t = int(dr.textlength(teaser, font=f_ts))
+        ty_bar = ch - 76
+        dr.rounded_rectangle([cw // 2 - tw_t // 2 - 30, ty_bar - 24, cw // 2 + tw_t // 2 + 30, ty_bar + 24], radius=8, fill=(18, 22, 32, 236), outline=(255, 255, 255, 78), width=1)
+        dr.text((cw // 2, ty_bar), teaser, font=f_ts, fill=(248, 212, 92, 255), anchor="mm")
+        return card
+
+    else:
+        # 16:9 LONG-FORM CINEMA COLD-OPEN HOOK CARD
+        cw, ch = 1480, 540
+        card = Image.new("RGBA", (cw, ch), (0, 0, 0, 0))
+        dr = ImageDraw.Draw(card)
+        border_col = (228, 36, 42, 225) if is_btc else (244, 196, 68, 225)
+        dr.rounded_rectangle([14, 14, cw - 14, ch - 14], radius=22, fill=(8, 10, 16, 212), outline=border_col, width=3)
+        # Eyebrow Pill
+        f_eye = load_font(FONT_MONO, 26, 700)
+        ew = int(dr.textlength(eyebrow_txt, font=f_eye)) + 56
+        if is_btc:
+            dr.rounded_rectangle([(cw - ew) // 2, 42, (cw + ew) // 2, 90], radius=8, fill=(218, 28, 34, 255))
+            dr.text((cw // 2, 66), eyebrow_txt, font=f_eye, fill=(255, 252, 248, 255), anchor="mm")
+        else:
+            dr.rounded_rectangle([(cw - ew) // 2, 42, (cw + ew) // 2, 90], radius=8, fill=(18, 22, 34, 248), outline=(246, 198, 62, 245), width=2)
+            dr.text((cw // 2, 66), eyebrow_txt, font=f_eye, fill=(248, 206, 74, 255), anchor="mm")
+
+        white_lines = [s for s in (l1, l2) if s]
+        one_white = " ".join(white_lines)
+        f_w = load_font(FONT_SANS, 102, 800)
+        fsz_w = 102
+        while fsz_w >= 54 and dr.textlength(one_white, font=f_w) > cw - 130:
+            fsz_w -= 4
+            f_w = load_font(FONT_SANS, fsz_w, 800)
+        _draw_soft_shadow_text(card, (cw // 2, 184), one_white, f_w, (254, 252, 248, 255), anchor="mm", blur_r=9)
+
+        hl_txt = l3 or yr_pill or "DECLASSIFIED"
+        fsz_h = 92
+        f_hl = load_font(FONT_SANS, fsz_h, 800)
+        while fsz_h >= 48 and dr.textlength(hl_txt, font=f_hl) > cw - 200:
+            fsz_h -= 4
+            f_hl = load_font(FONT_SANS, fsz_h, 800)
+        rw = int(dr.textlength(hl_txt, font=f_hl)) + 66
+        rh = int(fsz_h * 1.28)
+        ry = 264
+        dr = ImageDraw.Draw(card)
+        dr.rounded_rectangle([(cw - rw) // 2, ry, (cw + rw) // 2, ry + rh], radius=12, fill=(*accent_rgb, 255))
+        dr.text((cw // 2, ry + rh // 2), hl_txt, font=f_hl, fill=accent_text, anchor="mm")
+
+        f_ts = load_font(FONT_MONO, 27, 700)
+        tw_t = int(dr.textlength(teaser, font=f_ts))
+        ty_b = ch - 76
+        dr.rounded_rectangle([cw // 2 - tw_t // 2 - 34, ty_b - 24, cw // 2 + tw_t // 2 + 34, ty_b + 24], radius=8, fill=(18, 22, 32, 235), outline=(255, 255, 255, 76), width=1)
+        dr.text((cw // 2, ty_b), teaser, font=f_ts, fill=(248, 212, 92, 255), anchor="mm")
+        return card
+
+
+def _frame_subject_right(img_path, W, H, base_bgr=(14, 16, 22)):
+    """
+    🔥 V21 STUDIO COMPOSITING (ZERO BORDER_REPLICATE HORIZONTAL STREAKS!):
+    Auto-strips museum caption borders, detects faces/subjects, places the crisp archival subject
+    cleanly on the right 66% of the frame, and smoothly feathers its left boundary into a rich
+    studio backdrop so the left typography zone is 100% silky-clean and high-contrast!
+    """
+    canvas = np.zeros((H, W, 3), dtype=np.uint8)
+    canvas[:, :] = base_bgr
+    if not img_path or not os.path.exists(img_path):
+        return canvas
+
+    im = cv2.imread(img_path)
+    if im is None:
+        return canvas
+    im = _strip_white_borders(im)
+    ih, iw = im.shape[:2]
+    cx_norm, cy_norm, has_face = _detect_primary_subject(im)
+
+    # Enhance micro-detail & crisp sharpness BEFORE compositing
+    lab = cv2.cvtColor(im, cv2.COLOR_BGR2LAB)
     l_ch, a_ch, b_ch = cv2.split(lab)
-    l_ch = cv2.createCLAHE(clipLimit=2.1, tileGridSize=(8, 8)).apply(l_ch)
-    crop = cv2.cvtColor(cv2.merge([l_ch, a_ch, b_ch]), cv2.COLOR_LAB2BGR)
-    blur = cv2.GaussianBlur(crop, (0, 0), 1.3)
-    return cv2.addWeighted(crop, 1.28, blur, -0.28, 0)
+    l_ch = cv2.createCLAHE(clipLimit=2.2, tileGridSize=(8, 8)).apply(l_ch)
+    im = cv2.cvtColor(cv2.merge([l_ch, a_ch, b_ch]), cv2.COLOR_LAB2BGR)
+    blur = cv2.GaussianBlur(im, (0, 0), 1.2)
+    im = cv2.addWeighted(im, 1.30, blur, -0.30, 0)
+
+    # Target visible hero box on the right ~68% (x = 410..1280 -> width 870px)
+    # Never stretch or replicate edge pixels! Scale proportionally to fill H cleanly.
+    min_w = int(W * 0.64)
+    sc_h = (H / float(ih)) * (1.06 if ih > iw else 1.04)
+    nw = int(round(iw * sc_h))
+    nh = int(round(ih * sc_h))
+    if nw < min_w:
+        sc_w = min_w / float(iw)
+        nw = min_w
+        nh = max(H, int(round(ih * sc_w)))
+    rs = cv2.resize(im, (nw, nh), interpolation=cv2.INTER_LANCZOS4)
+
+    # Vertical crop centered on face (or upper-middle focal zone)
+    y0 = max(0, min(nh - H, int(cy_norm * nh - H * (0.38 if has_face else 0.44))))
+
+    # Horizontal crop: keep primary subject near x ~ 70% of final 1280px canvas
+    slot_w = min(W, max(min_w, int(W * 0.74)))
+    if nw >= slot_w:
+        # Place face/subject cleanly around 58% inside the right slot (which maps to ~70% of full W)
+        subj_target = int(slot_w * 0.56)
+        x0 = max(0, min(nw - slot_w, int(cx_norm * nw - subj_target)))
+        patch = rs[y0:y0 + H, x0:x0 + slot_w]
+    else:
+        patch = rs[y0:y0 + H, :nw]
+        slot_w = nw
+
+    px0 = W - slot_w
+    # Silky-smooth cosine S-curve left feather into studio backdrop (ZERO seams, ZERO stripes!)
+    feath = min(290, max(160, int(slot_w * 0.34)))
+    u = np.linspace(0.0, 1.0, feath, dtype=np.float32)
+    smooth = (0.5 - 0.5 * np.cos(np.pi * u)) ** 1.15
+    alpha = np.ones((H, slot_w, 1), dtype=np.float32)
+    alpha[:, :feath, 0] = smooth[None, :]
+
+    # Add ultra-subtle blurred atmospheric bleed from the photo itself behind the left backdrop
+    atm = cv2.GaussianBlur(cv2.resize(im, (W, H), interpolation=cv2.INTER_AREA), (95, 95), 0)
+    bg_studio = np.clip(atm.astype(np.float32) * 0.22 + np.array(base_bgr, dtype=np.float32)[None, None, :] * 0.78, 0, 255)
+    roi = bg_studio[:, px0:W]
+    bg_studio[:, px0:W] = patch.astype(np.float32) * alpha + roi * (1.0 - alpha)
+    return np.clip(bg_studio, 0, 255).astype(np.uint8)
 
 
 def _split_headline_lines(w_txt, r_txt):
@@ -1231,7 +1459,6 @@ def _split_headline_lines(w_txt, r_txt):
         for i in range(1, len(w_words)):
             a = " ".join(w_words[:i])
             b = " ".join(w_words[i:])
-            # Slight preference for putting extra word on top line when tied (reads like 'ONE MAN / STOPPED')
             diff = abs(len(a) - len(b)) - (0.5 if len(a) >= len(b) else 0.0)
             if diff < best_diff:
                 best_diff = diff
@@ -1242,157 +1469,220 @@ def _split_headline_lines(w_txt, r_txt):
 
 
 def generate_v20_thumbnail(hero_img_path, second_img_path, brand, headline_white, headline_red, stamp_badge, out_jpg,
-                           center_pill=None):
+                           center_pill=None, teaser=None):
     """
-    🔥 V20.7 ORIGINAL SIGNATURE BRAND THUMBNAIL ENGINE (1280x720)!
-    Automatically renders each channel's bespoke, 100% original visual identity:
-      - BEHIND THE CURTAIN -> BEHANCE #1: 'A24 / SWISS REDACT'
-          (Silver-gelatin monochrome portrait + Swiss hairline grid + vermilion redaction block + CIA black bar)
-      - HISTORY UNSEALED   -> OPTION D: 'NETFLIX CINEMA POSTER'
-          (Full-bleed movie-poster real archival hero + obsidian sweep + vertical gold bar + luxury white/gold title)
+    🔥 V21 ULTRA-CTR VIRAL DOCUMENTARY MINIATURE ENGINE (1280x720)!
+    100% original, high-contrast mobile-first (160px legible!) bespoke brand identities:
+      - BEHIND THE CURTAIN -> V21 'DECLASSIFIED SPY BRIEFING' (Cold War steel-platinum + crimson-amber
+          rim glow + blazing vermilion power highlight + tilted TOP SECRET stamp + bottom curiosity strip)
+      - HISTORY UNSEALED   -> V21 'CINEMATIC ARCHIVAL EPIC' (Hollywood teal-and-gold grade + warm radial
+          spotlight + midnight-gold pill + radiant imperial-gold power highlight + archival year crest)
+    Bottom-right 210x85 zone is ALWAYS kept clear for YouTube's duration badge!
     """
     W, H = 1280, 720
     is_btc = ("BEHIND" in str(brand or "").upper()) or ("CURTAIN" in str(brand or "").upper())
     l1, l2, l3 = _split_headline_lines(headline_white, headline_red)
-    yr_tag = str(center_pill or stamp_badge or "").replace("->", "–").strip().upper()[:18]
-    if not yr_tag:
-        yr_tag = "ARCHIVE"
+    yr_tag = str(center_pill or stamp_badge or "").replace("->", "–").strip().upper()[:16] or "ARCHIVE"
+    st_lbl = str(stamp_badge or ("CIA ARCHIVE" if is_btc else "UNSEALED")).strip().upper()[:16]
+    ts_lbl = str(teaser or ("THE DECLASSIFIED ARCHIVE" if is_btc else "FULL ARCHIVAL DOCUMENTARY")).strip().upper()[:34]
 
-    bg = _frame_subject_right(hero_img_path, W, H)
+    ys, xs = np.mgrid[0:H, 0:W].astype(np.float32)
 
     if is_btc:
         # =====================================================================
-        # CHANNEL 1: BEHIND THE CURTAIN — BEHANCE #1 ('A24 / SWISS REDACT')
+        # CHANNEL 1: BEHIND THE CURTAIN — V21 'DECLASSIFIED SPY BRIEFING'
         # =====================================================================
+        bg = _frame_subject_right(hero_img_path, W, H, base_bgr=(12, 13, 18))
+
+        # High-contrast Cold War Steel-Platinum + Warm Tungsten Highlights split-tone!
         g = cv2.cvtColor(bg, cv2.COLOR_BGR2GRAY).astype(np.float32)
-        g = np.clip(((g / 255.0) ** 1.18) * 255.0, 0, 255)
-        g = np.clip((g - 115.0) * 1.28 + 112.0, 0, 255)
-        mono = cv2.merge([
-            np.clip(g * 0.96, 0, 255),
-            np.clip(g * 0.97, 0, 255),
-            np.clip(g * 1.00, 0, 255),
-        ]).astype(np.uint8)
+        g_norm = np.clip(g / 255.0, 0.0, 1.0)
+        g_s = np.clip(((g_norm - 0.45) * 1.28 + 0.46), 0.0, 1.0) * 255.0
+        # Cool steel shadows + warm silver-tungsten highlights (beats flat dead gray on mobile!)
+        hi_w = np.clip((g_s - 120.0) / 135.0, 0.0, 1.0)
+        sh_w = 1.0 - hi_w
+        b_ch = np.clip(g_s * (1.06 * sh_w + 0.90 * hi_w) + 6 * sh_w, 0, 255)
+        g_ch = np.clip(g_s * (1.00 * sh_w + 0.98 * hi_w) + 2 * sh_w, 0, 255)
+        r_ch = np.clip(g_s * (0.93 * sh_w + 1.10 * hi_w), 0, 255)
+        graded = cv2.merge([b_ch, g_ch, r_ch]).astype(np.float32)
 
-        # Smooth obsidian editorial sweep on left + subtle top/bottom edge vignette so micro-type pops over any photo
-        xs = np.linspace(0, 1, W, dtype=np.float32)[None, :, None]
-        ys = np.linspace(0, 1, H, dtype=np.float32)[:, None, None]
-        fade = np.clip(
-            1.0
-            - np.clip(1.0 - xs * 1.72, 0.0, 1.0) * 0.90
-            - np.clip((ys - 0.68) * 2.6, 0.0, 1.0) * 0.48
-            - np.clip((0.18 - ys) * 3.8, 0.0, 1.0) * 0.42,
-            0.08,
-            1.0,
-        )
-        canvas = np.clip(mono.astype(np.float32) * fade, 0, 255).astype(np.uint8)
+        # Deep obsidian left sweep + crisp subject spotlight on right + crimson-amber rim backlight!
+        left_dark = np.clip(1.0 - (xs / 790.0), 0.0, 1.0) ** 1.25
+        bot_dark = np.clip((ys - 500.0) / 220.0, 0.0, 1.0) ** 1.5
+        shade = np.clip(1.0 - 0.90 * left_dark - 0.45 * bot_dark, 0.08, 1.0)
+        canvas = graded * shade[:, :, None]
 
-        # Authentic 35mm A24 silver-gelatin film grain
-        seed_v = sum(ord(c) for c in f"{l1}{l3}") + 1983
-        rng = np.random.default_rng(seed_v)
-        grain = rng.normal(0, 6.2, (H, W, 1)).astype(np.float32)
-        canvas = np.clip(canvas.astype(np.float32) + grain, 0, 255).astype(np.uint8)
+        # Dramatic Crimson-Amber Intelligence Backlight behind subject & left power zone
+        rim_d = np.exp(-(((xs - 660.0) / 310.0) ** 2 + ((ys - 370.0) / 290.0) ** 2))
+        canvas[:, :, 2] = np.clip(canvas[:, :, 2] + rim_d * 54.0, 0, 255)
+        canvas[:, :, 1] = np.clip(canvas[:, :, 1] + rim_d * 14.0, 0, 255)
+        canvas[:, :, 0] = np.clip(canvas[:, :, 0] + rim_d * 10.0, 0, 255)
+
+        # Subtle 35mm cinema grain
+        rng = np.random.default_rng(sum(ord(c) for c in f"{l1}{l3}") + 1983)
+        grain = rng.normal(0, 4.2, (H, W, 1)).astype(np.float32)
+        canvas = np.clip(canvas + grain, 0, 255).astype(np.uint8)
 
         im = Image.fromarray(cv2.cvtColor(canvas, cv2.COLOR_BGR2RGB)).convert("RGBA")
         dr = ImageDraw.Draw(im)
 
-        # Swiss Editorial Hairline Grid Framing (Behance signature!)
-        dr.line([(44, 44), (W - 44, 44)], fill=(255, 255, 255, 98), width=1)
-        dr.line([(44, H - 44), (W - 44, H - 44)], fill=(255, 255, 255, 98), width=1)
-        dr.line([(44, 44), (44, H - 44)], fill=(255, 255, 255, 74), width=1)
-        dr.line([(W - 44, 44), (W - 44, H - 44)], fill=(255, 255, 255, 74), width=1)
+        # Subtle crimson top cinema stripe + left vertical intelligence bar
+        dr.rectangle([0, 0, W, 8], fill=(226, 30, 36, 255))
+        dr.rectangle([48, 72, 58, 636], fill=(228, 32, 38, 255))
 
-        # Swiss micro-typography header + vermilion square indicator (dark obsidian micro-pill on top-right so it pops over bright skies!)
-        dr.text((64, 62), "BEHIND THE CURTAIN", font=load_font(FONT_MONO, 19, 700), fill=(242, 242, 242, 238))
-        f_tr = load_font(FONT_MONO, 18, 700)
-        tr_txt = f"FILE NO. {yr_tag[:12]}  //  DECLASSIFIED"
-        tr_w = int(dr.textlength(tr_txt, font=f_tr))
-        dr.rectangle([W - 64 - tr_w - 20, 56, W - 56, 86], fill=(10, 11, 14, 178))
-        dr.text((W - 66, 71), tr_txt, font=f_tr, fill=(246, 246, 246, 242), anchor="rm")
-        st_lbl = str(stamp_badge or "DECLASSIFIED").strip().upper()[:18]
-        dr.rectangle([64, 102, 82, 120], fill=(230, 34, 38, 255))
-        dr.text((96, 100), f"EYES ONLY  •  {st_lbl}"[:32], font=load_font(FONT_MONO, 18, 700), fill=(242, 54, 58, 250))
+        # Subtle classified crosshair ticks in top-left dark backdrop
+        for gx in (58, 290, 520):
+            dr.line([(gx, 38), (gx, 52)], fill=(255, 255, 255, 58), width=1)
 
-        # Auto-fit bone-white ultra-tight editorial stack on left with subtle editorial shadow
+        # 1) Top Blazing Solid Vermilion Eyebrow Pill (100% legible on mobile!)
+        f_pill = load_font(FONT_MONO, 24, 700)
+        pill_txt = f"DECLASSIFIED  •  {yr_tag}"[:30]
+        pw_p = int(dr.textlength(pill_txt, font=f_pill)) + 36
+        dr.rounded_rectangle([80, 72, 80 + pw_p, 118], radius=7, fill=(224, 28, 34, 255))
+        dr.text((80 + pw_p // 2, 95), pill_txt, font=f_pill, fill=(255, 252, 248, 255), anchor="mm")
+
+        # 2) Massive Pure Bone-White Stacked Power Lines (112-130px!)
         max_lw = 575
         white_lines = [s for s in (l1, l2) if s]
-        y_cur = 176 if len(white_lines) == 2 else 232
+        y_cur = 152 if len(white_lines) == 2 else 218
         for wl in white_lines:
-            fsz = 108
+            fsz = 122 if len(white_lines) == 2 else 132
             f_use = load_font(FONT_SANS, fsz, 800)
-            while fsz >= 56 and dr.textlength(wl, font=f_use) > max_lw:
+            while fsz >= 62 and dr.textlength(wl, font=f_use) > max_lw:
                 fsz -= 4
                 f_use = load_font(FONT_SANS, fsz, 800)
-            dr.text((64, y_cur + 4), wl, font=f_use, fill=(0, 0, 0, 155))
-            dr.text((60, y_cur), wl, font=f_use, fill=(252, 250, 246, 255))
-            y_cur += int(fsz * 1.09)
+            _draw_soft_shadow_text(im, (78, y_cur), wl, f_use, (254, 252, 248, 255), anchor="la", blur_r=10)
+            y_cur += int(fsz * 1.07)
 
-        # Blazing Vermilion Swiss Redaction Block behind the shocking punchline phrase!
+        # 3) Blazing Vermilion Power Climax Banner (with subtle crimson glow + gold top edge!)
         hl_txt = l3 or "DECLASSIFIED"
-        fsz_h = 84
+        fsz_h = 98
         f_hl = load_font(FONT_SANS, fsz_h, 800)
-        while fsz_h >= 46 and dr.textlength(hl_txt, font=f_hl) > 545:
+        while fsz_h >= 50 and dr.textlength(hl_txt, font=f_hl) > 540:
             fsz_h -= 4
             f_hl = load_font(FONT_SANS, fsz_h, 800)
-        rw = int(dr.textlength(hl_txt, font=f_hl))
-        ry = max(y_cur + 14, 416)
-        rh = int(fsz_h * 1.34)
-        dr.rectangle([60, ry, 60 + rw + 44, ry + rh], fill=(224, 28, 32, 255))
-        dr.text((82, ry + rh // 2), hl_txt, font=f_hl, fill=(252, 250, 248, 255), anchor="lm")
+        dr = ImageDraw.Draw(im)
+        rw = int(dr.textlength(hl_txt, font=f_hl)) + 52
+        rh = int(fsz_h * 1.30)
+        ry = max(y_cur + 16, 412)
+        ry = min(ry, H - 122 - rh)
+        # Soft red ambient glow behind power banner
+        glow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        ImageDraw.Draw(glow).rounded_rectangle([72, ry - 6, 86 + rw, ry + rh + 6], radius=14, fill=(235, 32, 38, 120))
+        glow = glow.filter(ImageFilter.GaussianBlur(radius=16))
+        im.alpha_composite(glow)
+        dr = ImageDraw.Draw(im)
+        dr.rounded_rectangle([78, ry, 78 + rw, ry + rh], radius=10, fill=(224, 26, 32, 255))
+        dr.line([(90, ry + 3), (78 + rw - 12, ry + 3)], fill=(255, 212, 92, 235), width=3)
+        dr.text((104, ry + rh // 2), hl_txt, font=f_hl, fill=(255, 252, 248, 255), anchor="lm")
 
-        # Authentic black CIA redaction bar + micro-caption at bottom
-        bar_y = min(H - 96, ry + rh + 40)
-        dr.rectangle([64, bar_y, 242, bar_y + 24], fill=(12, 12, 14, 245), outline=(255, 255, 255, 76), width=1)
-        dr.text(
-            (258, bar_y + 1),
-            f"REAL ARCHIVAL FOOTAGE  —  {yr_tag}"[:40],
-            font=load_font(FONT_MONO, 19, 700),
-            fill=(218, 222, 230, 230),
-        )
+        # 4) Bottom-Left Frosted Curiosity Strip (100% legible over ANY bright background!)
+        f_ts = load_font(FONT_MONO, 22, 700)
+        ts_w = int(dr.textlength(ts_lbl, font=f_ts))
+        by_ts = H - 84
+        dr.rounded_rectangle([78, by_ts - 22, 78 + ts_w + 54, by_ts + 22], radius=7, fill=(10, 12, 18, 225), outline=(255, 255, 255, 76), width=1)
+        dr.ellipse([94, by_ts - 6, 106, by_ts + 6], fill=(248, 206, 68, 255))
+        dr.text((118, by_ts), ts_lbl, font=f_ts, fill=(242, 244, 248, 248), anchor="lm")
+
+        # 5) Top-Right Authentic Tilted Rubber Stamp (NEVER overlaps YouTube's bottom-right timestamp!)
+        st_badge = _draw_rubber_stamp_badge(st_lbl, color_rgba=(255, 74, 78, 252), angle=-8.5)
+        im.alpha_composite(st_badge, (W - st_badge.width - 34, 28))
 
     else:
         # =====================================================================
-        # CHANNEL 2: HISTORY UNSEALED — OPTION D ('NETFLIX CINEMA POSTER')
+        # CHANNEL 2: HISTORY UNSEALED — V21 'CINEMATIC ARCHIVAL EPIC'
         # =====================================================================
-        # Warm dramatic movie-poster color grade (rich golden highlights + deep obsidian shadows)
-        bg_f = bg.astype(np.float32)
-        bg_f[:, :, 2] = np.clip(bg_f[:, :, 2] * 1.11, 0, 255)
-        bg_f[:, :, 0] = np.clip(bg_f[:, :, 0] * 0.90, 0, 255)
-        bg = bg_f.astype(np.uint8)
+        bg = _frame_subject_right(hero_img_path, W, H, base_bgr=(11, 14, 22))
 
-        ys, xs = np.mgrid[0:H, 0:W].astype(np.float32)
-        grad_l = np.clip(1.0 - xs / 790.0, 0.0, 1.0) ** 1.32
-        grad_b = np.clip((ys - 430.0) / 290.0, 0.0, 1.0) ** 1.4
-        shade = np.clip(1.0 - 0.88 * grad_l - 0.54 * grad_b, 0.08, 1.0)
-        canvas = np.clip(bg.astype(np.float32) * shade[:, :, None], 0, 255).astype(np.uint8)
-        canvas = add_anamorphic_flare(canvas, 172, 920, intensity=0.38, color_bgr=(52, 168, 246))
+        # Rich Hollywood Teal-Shadows & Warm Golden-Hour Highlights cinema color grade!
+        bg_f = bg.astype(np.float32)
+        luma = (0.114 * bg_f[:, :, 0] + 0.587 * bg_f[:, :, 1] + 0.299 * bg_f[:, :, 2]) / 255.0
+        hi_w = np.clip((luma - 0.35) / 0.65, 0.0, 1.0)
+        sh_w = 1.0 - hi_w
+        bg_f[:, :, 2] = np.clip(bg_f[:, :, 2] * (0.94 * sh_w + 1.15 * hi_w) + 6 * hi_w, 0, 255)
+        bg_f[:, :, 1] = np.clip(bg_f[:, :, 1] * (1.00 * sh_w + 1.04 * hi_w), 0, 255)
+        bg_f[:, :, 0] = np.clip(bg_f[:, :, 0] * (1.08 * sh_w + 0.84 * hi_w) + 8 * sh_w, 0, 255)
+
+        # Deep Royal Midnight-Obsidian left sweep + warm bottom cinema vignette
+        grad_l = np.clip(1.0 - xs / 810.0, 0.0, 1.0) ** 1.25
+        grad_b = np.clip((ys - 485.0) / 235.0, 0.0, 1.0) ** 1.45
+        shade = np.clip(1.0 - 0.91 * grad_l - 0.46 * grad_b, 0.08, 1.0)
+        canvas = bg_f * shade[:, :, None]
+
+        # Warm Golden-Amber Cinema Backlight Halo separating subject & headline!
+        gold_d = np.exp(-(((xs - 740.0) / 340.0) ** 2 + ((ys - 330.0) / 280.0) ** 2))
+        canvas[:, :, 2] = np.clip(canvas[:, :, 2] + gold_d * 46.0, 0, 255)
+        canvas[:, :, 1] = np.clip(canvas[:, :, 1] + gold_d * 34.0, 0, 255)
+        canvas[:, :, 0] = np.clip(canvas[:, :, 0] + gold_d * 8.0, 0, 255)
+        canvas = np.clip(canvas, 0, 255).astype(np.uint8)
 
         im = Image.fromarray(cv2.cvtColor(canvas, cv2.COLOR_BGR2RGB)).convert("RGBA")
         dr = ImageDraw.Draw(im)
 
-        # Signature sleek vertical gold documentary accent bar + eyebrow
-        dr.rectangle([62, 146, 74, 560], fill=(244, 194, 62, 255))
-        eyebrow = f"HISTORY UNSEALED  •  {yr_tag}"[:34]
-        dr.text((100, 148), eyebrow, font=load_font(FONT_MONO, 24, 700), fill=(244, 194, 62, 255))
+        # Signature top gold hairline + vertical Imperial Gold Documentary Pillar
+        dr.rectangle([0, 0, W, 8], fill=(246, 198, 62, 255))
+        dr.rectangle([50, 74, 60, 636], fill=(246, 198, 62, 255))
 
-        # Auto-fit 3-line massive movie-poster typography (PURE WHITE top lines + WARM GOLD climax line!)
-        poster_lines = [(s, (255, 255, 255, 255)) for s in (l1, l2) if s]
-        if l3:
-            poster_lines.append((l3, (248, 202, 64, 255)))
-        y_cur = 204 if len(poster_lines) >= 3 else 248
-        for txt_ln, col_ln in poster_lines:
-            fsz = 110
+        # 1) Top Solid Midnight-Gold Eyebrow Pill (100% readable even over bright ivory engravings!)
+        f_eye = load_font(FONT_MONO, 24, 700)
+        eye_txt = f"HISTORY UNSEALED  •  {yr_tag}"[:32]
+        ew = int(dr.textlength(eye_txt, font=f_eye)) + 40
+        dr.rounded_rectangle([82, 74, 82 + ew, 120], radius=8, fill=(14, 18, 28, 242), outline=(246, 198, 62, 245), width=2)
+        dr.text((82 + ew // 2, 97), eye_txt, font=f_eye, fill=(250, 208, 76, 255), anchor="mm")
+
+        # 2) Massive Pure-White Stacked Movie-Poster Headline (zero cartoon black borders -> lush studio shadow!)
+        max_lw = 620
+        white_lines = [s for s in (l1, l2) if s]
+        y_cur = 154 if len(white_lines) == 2 else 220
+        for wl in white_lines:
+            fsz = 122 if len(white_lines) == 2 else 134
             f_use = load_font(FONT_SANS, fsz, 800)
-            while fsz >= 58 and dr.textlength(txt_ln, font=f_use) > 740:
+            while fsz >= 62 and dr.textlength(wl, font=f_use) > max_lw:
                 fsz -= 4
                 f_use = load_font(FONT_SANS, fsz, 800)
-            dr.text((96, y_cur), txt_ln, font=f_use, fill=col_ln, stroke_width=4, stroke_fill=(0, 0, 0, 195))
-            y_cur += int(fsz * 1.10)
+            _draw_soft_shadow_text(im, (82, y_cur), wl, f_use, (255, 254, 250, 255), anchor="la", blur_r=11)
+            y_cur += int(fsz * 1.07)
 
-        dr.text((62, 638), "FULL ARCHIVAL DOCUMENTARY  •  REAL FOOTAGE", font=load_font(FONT_MONO, 22, 700), fill=(214, 220, 232, 225))
+        # 3) Radiant Imperial-Gold Climax Power Banner (blazing gold ribbon + dark obsidian ink -> unstoppable CTR!)
+        hl_txt = l3 or yr_tag
+        fsz_h = 98
+        f_hl = load_font(FONT_SANS, fsz_h, 800)
+        while fsz_h >= 50 and dr.textlength(hl_txt, font=f_hl) > 580:
+            fsz_h -= 4
+            f_hl = load_font(FONT_SANS, fsz_h, 800)
+        dr = ImageDraw.Draw(im)
+        rw = int(dr.textlength(hl_txt, font=f_hl)) + 54
+        rh = int(fsz_h * 1.30)
+        ry = max(y_cur + 16, 412)
+        ry = min(ry, H - 122 - rh)
+        glow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        ImageDraw.Draw(glow).rounded_rectangle([76, ry - 6, 90 + rw, ry + rh + 6], radius=14, fill=(248, 200, 62, 115))
+        glow = glow.filter(ImageFilter.GaussianBlur(radius=16))
+        im.alpha_composite(glow)
+        dr = ImageDraw.Draw(im)
+        dr.rounded_rectangle([82, ry, 82 + rw, ry + rh], radius=10, fill=(248, 200, 58, 255))
+        dr.line([(94, ry + 3), (82 + rw - 12, ry + 3)], fill=(255, 245, 200, 240), width=3)
+        dr.text((109, ry + rh // 2), hl_txt, font=f_hl, fill=(14, 16, 22, 255), anchor="lm")
+
+        # 4) Bottom-Left Frosted Documentary Tag Pill (leaving bottom-right 100% clear for YouTube timestamp!)
+        f_ts = load_font(FONT_MONO, 22, 700)
+        ts_w = int(dr.textlength(ts_lbl, font=f_ts))
+        by_ts = H - 84
+        dr.rounded_rectangle([82, by_ts - 22, 82 + ts_w + 54, by_ts + 22], radius=7, fill=(12, 15, 24, 228), outline=(246, 198, 62, 145), width=1)
+        # Gold diamond icon
+        dr.polygon([(104, by_ts - 7), (111, by_ts), (104, by_ts + 7), (97, by_ts)], fill=(248, 204, 68, 255))
+        dr.text((122, by_ts), ts_lbl, font=f_ts, fill=(244, 242, 236, 248), anchor="lm")
+
+        # 5) Top-Right Sleek Obsidian-Gold Archive Year Crest (away from faces & bottom-right timestamp!)
+        crest_txt = f"ARCHIVE  //  {yr_tag}"[:22]
+        f_cr = load_font(FONT_MONO, 20, 700)
+        cw_c = int(dr.textlength(crest_txt, font=f_cr)) + 34
+        dr.rounded_rectangle([W - cw_c - 38, 34, W - 38, 76], radius=7, fill=(12, 15, 24, 224), outline=(246, 198, 62, 210), width=2)
+        dr.text((W - 38 - cw_c // 2, 55), crest_txt, font=f_cr, fill=(248, 206, 74, 255), anchor="mm")
 
     im.convert("RGB").save(out_jpg, "JPEG", quality=94, optimize=True)
-    style_lbl = "BEHANCE-1 A24-SWISS-REDACT" if is_btc else "OPTION-D NETFLIX-POSTER"
-    print(f"[V20.7 {style_lbl} THUMB OK] {out_jpg} ({os.path.getsize(out_jpg)/1024:.1f} KB)")
+    style_lbl = "V21 DECLASSIFIED-BRIEFING" if is_btc else "V21 ARCHIVAL-EPIC"
+    print(f"[{style_lbl} THUMB OK] {out_jpg} ({os.path.getsize(out_jpg)/1024:.1f} KB)")
     return out_jpg
 
 
