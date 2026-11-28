@@ -15,11 +15,13 @@ on:
         default: 'teaser_doc'
         type: choice
         options:
-          - 'teaser_doc'
-          - 'teaser_reel'
-          - 'carousel'
-          - 'text'
-          - 'welcome'
+          - teaser_doc
+          - versus_ab
+          - before_after_whatif
+          - before_after
+          - what_if
+          - text
+          - welcome
       dry_run:
         description: 'Dry run only (render without publishing to Facebook)'
         required: false
