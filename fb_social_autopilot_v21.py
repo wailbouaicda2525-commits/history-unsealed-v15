@@ -444,7 +444,7 @@ Include {th['hashtags']}. Return ONLY valid JSON: {{"message": "..."}}"""
 def main():
     cfg = _load_cfg()
     ap = argparse.ArgumentParser()
-    ap.add_argument("--mode", choices=["teaser_doc", "teaser_reel", "carousel", "text", "welcome"], default="teaser_doc")
+    ap.add_argument("--mode", choices=["teaser_doc", "teaser_reel", "versus_ab", "before_after_whatif", "before_after", "what_if", "text", "carousel", "welcome"], default="teaser_doc")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
     if not args.dry_run and not fb_is_configured():
