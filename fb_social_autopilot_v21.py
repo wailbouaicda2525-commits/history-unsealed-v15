@@ -450,6 +450,11 @@ def main():
     if not args.dry_run and not fb_is_configured():
         print("[FB SOCIAL] FB_PAGE_ID / FB_PAGE_ACCESS_TOKEN not configured yet — exiting cleanly.", flush=True)
         return
+    if args.mode in ("versus_ab", "before_after", "what_if", "before_after_whatif"):
+        from fb_viral_single_cards import run_viral_single_card
+        run_viral_single_card("history_unsealed", args.mode, out_dir="/tmp", dry_run=args.dry_run)
+        return
+
     if args.mode == "teaser_doc":
         run_teaser(cfg, is_doc=True, dry_run=args.dry_run)
     elif args.mode == "teaser_reel":
