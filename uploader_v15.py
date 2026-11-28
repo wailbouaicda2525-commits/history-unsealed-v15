@@ -78,13 +78,63 @@ def upload_video_to_youtube(mp4_path, title, description, tags, privacy="public"
     print(f"[YOUTUBE LIVE!] https://www.youtube.com/watch?v={vid_id} (privacy={privacy})")
 
     if thumbnail_path and os.path.exists(thumbnail_path):
+        is_sh = ("#shorts" in (title or "").lower()) or ("#shorts" in (description or "").lower()) or ("short" in str(video_path).lower())
+        _set_thumbnail_with_shorts_guarantee(yt, vid_id, thumbnail_path, is_short=is_sh)
+
+    return vid_id
+
+
+def _set_thumbnail_with_shorts_guarantee(yt, vid_id: str, thumbnail_path: str, is_short: bool = False) -> bool:
+    """
+    Waits until YouTube finishes video processing (`processingStatus == 'succeeded'`)
+    BEFORE calling `thumbnails().set`, and for Shorts explicitly verifies that YouTube
+    generated `shortsAspectRatio` (`sardefault.jpg`, the exact image shown on `/shorts`!).
+    Retries automatically if YouTube's Shorts pipeline hasn't registered `sardefault.jpg` yet.
+    """
+    import time as _t
+    from googleapiclient.http import MediaFileUpload as _MFU
+
+    # 1) Wait for processingStatus == 'succeeded' (prevents YouTube dropping shortsAspectRatio!)
+    print(f"  [YT THUMB] Waiting for YouTube processing on {vid_id}...", flush=True)
+    for poll in range(22):  # up to ~176s
+        try:
+            info = yt.videos().list(part="processingDetails,contentDetails", id=vid_id).execute()
+            items = info.get("items", [])
+            if items:
+                pstat = items[0].get("processingDetails", {}).get("processingStatus", "")
+                if pstat == "succeeded":
+                    print(f"  [YT THUMB] Processing succeeded on poll #{poll+1} — settling 8s for Shorts pipeline...", flush=True)
+                    _t.sleep(8)
+                    break
+                if pstat in ("failed", "terminated"):
+                    print(f"  [YT THUMB] Processing status={pstat}", flush=True)
+                    break
+        except Exception as pe:
+            print(f"  [YT THUMB] Poll warning: {pe}", flush=True)
+        _t.sleep(8)
+
+    # 2) Upload thumbnail & verify `shortsAspectRatio` (sardefault.jpg) for Shorts!
+    ok = False
+    max_attempts = 4 if is_short else 2
+    for attempt in range(1, max_attempts + 1):
         try:
             yt.thumbnails().set(
                 videoId=vid_id,
-                media_body=MediaFileUpload(thumbnail_path, mimetype="image/jpeg"),
+                media_body=_MFU(str(thumbnail_path), mimetype="image/jpeg"),
             ).execute()
-            print("[THUMBNAIL UPLOADED OK!]")
+            ok = True
+            if not is_short:
+                print(f"  [YT THUMB OK!] Set custom 16:9 thumbnail on {vid_id}", flush=True)
+                return True
+            _t.sleep(5)
+            chk = yt.videos().list(part="snippet", id=vid_id).execute()
+            thumbs = (chk.get("items") or [{}])[0].get("snippet", {}).get("thumbnails", {})
+            if "shortsAspectRatio" in thumbs:
+                print(f"  [YT SHORTS MINIATURE VERIFIED OK!] shortsAspectRatio (sardefault.jpg) LIVE on {vid_id} (attempt {attempt})", flush=True)
+                return True
+            print(f"  [YT SHORTS MINIATURE] attempt {attempt}/{max_attempts}: sardefault.jpg not ready yet — retrying in 20s...", flush=True)
+            _t.sleep(20)
         except Exception as e:
-            print(f"[THUMBNAIL SKIPPED — verify channel phone at youtube.com/verify]: {e}")
-
-    return vid_id
+            print(f"  [YT THUMB] Attempt {attempt} warning: {e}", flush=True)
+            _t.sleep(10)
+    return ok
