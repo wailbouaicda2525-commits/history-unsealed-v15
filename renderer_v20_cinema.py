@@ -986,12 +986,11 @@ def render_v20_cinema(ev, script, voice_dur, words, audio_m4a, env30, spec30, ou
         if (not show_outro) or ((total_dur - t) > outro_len):
             sub = sub_cache.get(t)
             if sub is not None:
-                sub_y = 1485 if vertical else H - 108
+                sub_y = 1435 if vertical else H - 108
                 frame = comp_rgba(frame, sub, W / 2.0, sub_y)
 
-        if t < 0.20:
-            frame = (frame.astype(np.float32) * (t / 0.20)).astype(np.uint8)
-        elif (total_dur - t) < 0.55:
+        # Frame-0..3s stays 100% BRIGHT from t=0.00s (no black flash on Shorts autoplay/frame picker!)
+        if (total_dur - t) < 0.55:
             frame = (frame.astype(np.float32) * max(0.0, (total_dur - t) / 0.55)).astype(np.uint8)
 
         if qa_out and fi in qa_targets:
@@ -1235,29 +1234,29 @@ def _build_v21_hook_overlay(W, H, ev, script, is_btc, vertical=True):
     eyebrow_txt = (f"DECLASSIFIED  •  {yr_pill}" if is_btc else f"HISTORY UNSEALED  •  {yr_pill}")[:32]
 
     if vertical:
-        cw, ch = 960, 1020
+        cw, ch = 876, 980
         card = Image.new("RGBA", (cw, ch), (0, 0, 0, 0))
         dr = ImageDraw.Draw(card)
 
-        # Frosted obsidian dossier shell with channel accent border
+        # Frosted obsidian dossier shell with channel accent border (100% inside Shorts safe zone!)
         border_col = (228, 36, 42, 225) if is_btc else (244, 196, 68, 225)
         dr.rounded_rectangle([14, 14, cw - 14, ch - 14], radius=24, fill=(9, 11, 17, 212), outline=border_col, width=3)
         dr.rounded_rectangle([26, 26, cw - 26, ch - 26], radius=18, outline=(255, 255, 255, 42), width=1)
 
         # 1) Top Branded Eyebrow Pill
-        f_eye = load_font(FONT_MONO, 24, 700)
-        ew = int(dr.textlength(eyebrow_txt, font=f_eye)) + 52
+        f_eye = load_font(FONT_MONO, 23, 700)
+        ew = int(dr.textlength(eyebrow_txt, font=f_eye)) + 48
         ex0 = (cw - ew) // 2
         if is_btc:
-            dr.rounded_rectangle([ex0, 42, ex0 + ew, 88], radius=8, fill=(218, 28, 34, 255))
-            dr.text((cw // 2, 65), eyebrow_txt, font=f_eye, fill=(255, 252, 248, 255), anchor="mm")
+            dr.rounded_rectangle([ex0, 40, ex0 + ew, 84], radius=8, fill=(218, 28, 34, 255))
+            dr.text((cw // 2, 62), eyebrow_txt, font=f_eye, fill=(255, 252, 248, 255), anchor="mm")
         else:
-            dr.rounded_rectangle([ex0, 42, ex0 + ew, 88], radius=8, fill=(18, 22, 34, 248), outline=(246, 198, 62, 245), width=2)
-            dr.text((cw // 2, 65), eyebrow_txt, font=f_eye, fill=(248, 206, 74, 255), anchor="mm")
+            dr.rounded_rectangle([ex0, 40, ex0 + ew, 84], radius=8, fill=(18, 22, 34, 248), outline=(246, 198, 62, 245), width=2)
+            dr.text((cw // 2, 62), eyebrow_txt, font=f_eye, fill=(248, 206, 74, 255), anchor="mm")
 
         # 2) Framed Real Archival Hero Evidence Window (instant visual proof at t=0.00s!)
-        pw, ph = 820, 395
-        px0, py0 = (cw - pw) // 2, 112
+        pw, ph = 752, 372
+        px0, py0 = (cw - pw) // 2, 108
         best_img = None
         if ev.get("images"):
             best_img, _ = pick_best_thumb_photos(ev["images"])
@@ -1683,6 +1682,219 @@ def generate_v20_thumbnail(hero_img_path, second_img_path, brand, headline_white
     im.convert("RGB").save(out_jpg, "JPEG", quality=94, optimize=True)
     style_lbl = "V21 DECLASSIFIED-BRIEFING" if is_btc else "V21 ARCHIVAL-EPIC"
     print(f"[{style_lbl} THUMB OK] {out_jpg} ({os.path.getsize(out_jpg)/1024:.1f} KB)")
+    return out_jpg
+
+
+def _frame_subject_center_shorts(img_path, W=1280, H=720, base_bgr=(12, 13, 18)):
+    """
+    Centers the hero archival subject (face-aware!) inside the YouTube Shorts 9:16 center viewport
+    (x=437..843, upper hero zone y=55..410) over a smooth full-bleed atmospheric 1280x720 backdrop.
+    Guarantees ZERO clipped subjects in Shorts 9:16/3:5 grid AND ZERO black bars in 16:9 views!
+    """
+    im = cv2.imread(img_path) if (img_path and os.path.exists(img_path)) else None
+    if im is None:
+        return np.full((H, W, 3), base_bgr, dtype=np.uint8)
+    ih, iw = im.shape[:2]
+
+    # 1) Full-bleed atmospheric blurred wings across 1280x720 (so 16:9 views look cinema-wide!)
+    sc_bg = max(W / float(iw), H / float(ih))
+    bg_rs = cv2.resize(im, (int(round(iw * sc_bg)), int(round(ih * sc_bg))), interpolation=cv2.INTER_AREA)
+    by0 = max(0, (bg_rs.shape[0] - H) // 2)
+    bx0 = max(0, (bg_rs.shape[1] - W) // 2)
+    bg_full = bg_rs[by0:by0 + H, bx0:bx0 + W]
+    bg_full = cv2.GaussianBlur(bg_full, (0, 0), sigmaX=24, sigmaY=24)
+    bg_full = np.clip(bg_full.astype(np.float32) * 0.42, 0, 255).astype(np.uint8)
+
+    # 2) Sharp hero plate framed cleanly inside the 9:16 Shorts center zone (560 x 500 around x=640, y=0..500)
+    #    Wider than 432px (560px) with feathered edges so 3:5 and 9:16 crops see a 100% crisp edge-to-edge photo!
+    box_w, box_h = 560, 495
+    gray = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY)
+    fx, fy = iw * 0.5, ih * 0.34
+    try:
+        casc = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+        faces = casc.detectMultiScale(gray, 1.12, 4, minSize=(40, 40))
+        if len(faces) > 0:
+            x, y, fw, fh = max(faces, key=lambda r: r[2] * r[3])
+            fx = x + fw * 0.50
+            fy = y + fh * 0.44
+    except Exception:
+        pass
+
+    # Compute cover scale for the center hero stage without over-zooming faces
+    sc = max(box_w / float(iw), box_h / float(ih))
+    # For wide landscapes, zoom just enough to fill box_h cleanly while centering on subject
+    rw = max(box_w, int(round(iw * sc)))
+    rh = max(box_h, int(round(ih * sc)))
+    rs = cv2.resize(im, (rw, rh), interpolation=cv2.INTER_LANCZOS4)
+
+    cx_s = fx * (rw / float(iw))
+    cy_s = fy * (rh / float(ih))
+    # Target eyes / focal center at x = box_w/2, y = box_h * 0.42 (right in the open Shorts window!)
+    sx0 = int(round(max(0, min(rw - box_w, cx_s - box_w * 0.50))))
+    sy0 = int(round(max(0, min(rh - box_h, cy_s - box_h * 0.44))))
+    crop = rs[sy0:sy0 + box_h, sx0:sx0 + box_w].copy()
+
+    # Smooth feather mask blending center hero cleanly into the 16:9 cinema wings & dark bottom typography bed
+    canvas = bg_full.astype(np.float32)
+    hx0 = (W - box_w) // 2
+    hy0 = 0
+    m_x = np.ones(box_w, dtype=np.float32)
+    fade_x = 58
+    m_x[:fade_x] = np.linspace(0.0, 1.0, fade_x)
+    m_x[-fade_x:] = np.linspace(1.0, 0.0, fade_x)
+    m_y = np.ones(box_h, dtype=np.float32)
+    fade_y = 95
+    m_y[-fade_y:] = np.linspace(1.0, 0.0, fade_y) ** 1.3
+    alpha = (m_y[:, None] * m_x[None, :])[:, :, None]
+
+    roi = canvas[hy0:hy0 + box_h, hx0:hx0 + box_w]
+    canvas[hy0:hy0 + box_h, hx0:hx0 + box_w] = crop.astype(np.float32) * alpha + roi * (1.0 - alpha)
+    return np.clip(canvas, 0, 255).astype(np.uint8)
+
+
+def generate_v21_shorts_thumbnail(hero_img_path, second_img_path, brand, headline_white, headline_red, stamp_badge, out_jpg,
+                                  center_pill=None, teaser=None):
+    """
+    🔥 V21 SHORTS-NATIVE DUAL-SAFE MINIATURE ENGINE (1280x720 canvas, 100% 9:16 & 3:5 CENTER-SAFE)!
+    Solves YouTube Shorts Grid center-cropping (x=437..843 at 9:16, x=424..856 at 3:5):
+      - ALL typography, eyebrow pill, power banner, and focal subject are centered strictly inside
+        x = 462..818 (356px safe width) and y = 26..610 (safely below '...' & well above '107 vues'!).
+      - Full 1280x720 cinema backdrop ensures ZERO black bars in Search / Home / Desktop Share!
+      - Matches exact V21 brand palettes:
+          * BEHIND THE CURTAIN -> Cold War Steel-Platinum + Blazing Vermilion Red
+          * HISTORY UNSEALED   -> Hollywood Teal-and-Gold + Radiant Imperial Gold
+    """
+    W, H = 1280, 720
+    CX = W // 2  # 640
+    SAFE_W = 352  # x = 464..816 -> >=27px clean margin even on strict 9:16 (437..843)!
+    is_btc = ("BEHIND" in str(brand or "").upper()) or ("CURTAIN" in str(brand or "").upper())
+    l1, l2, l3 = _split_headline_lines(headline_white, headline_red)
+    yr_tag = str(center_pill or stamp_badge or "").replace("->", "–").strip().upper()[:10] or "ARCHIVE"
+    ts_lbl = str(teaser or ("DECLASSIFIED FILE" if is_btc else "ARCHIVE UNSEALED")).strip().upper()[:28]
+
+    ys, xs = np.mgrid[0:H, 0:W].astype(np.float32)
+    bg = _frame_subject_center_shorts(hero_img_path, W, H, base_bgr=(11, 13, 19))
+
+    if is_btc:
+        # Steel-Platinum + Warm Tungsten Highlights split-tone
+        g = cv2.cvtColor(bg, cv2.COLOR_BGR2GRAY).astype(np.float32)
+        g_norm = np.clip(g / 255.0, 0.0, 1.0)
+        g_s = np.clip(((g_norm - 0.44) * 1.26 + 0.47), 0.0, 1.0) * 255.0
+        hi_w = np.clip((g_s - 118.0) / 137.0, 0.0, 1.0)
+        sh_w = 1.0 - hi_w
+        graded = cv2.merge([
+            np.clip(g_s * (1.06 * sh_w + 0.90 * hi_w) + 6 * sh_w, 0, 255),
+            np.clip(g_s * (1.00 * sh_w + 0.98 * hi_w) + 2 * sh_w, 0, 255),
+            np.clip(g_s * (0.93 * sh_w + 1.10 * hi_w), 0, 255),
+        ]).astype(np.float32)
+    else:
+        # Hollywood Teal-Shadows & Warm Golden-Hour Highlights
+        bg_f = bg.astype(np.float32)
+        luma = (0.114 * bg_f[:, :, 0] + 0.587 * bg_f[:, :, 1] + 0.299 * bg_f[:, :, 2]) / 255.0
+        hi_w = np.clip((luma - 0.34) / 0.66, 0.0, 1.0)
+        sh_w = 1.0 - hi_w
+        graded = bg_f.copy()
+        graded[:, :, 2] = np.clip(bg_f[:, :, 2] * (0.94 * sh_w + 1.15 * hi_w) + 6 * hi_w, 0, 255)
+        graded[:, :, 1] = np.clip(bg_f[:, :, 1] * (1.00 * sh_w + 1.04 * hi_w), 0, 255)
+        graded[:, :, 0] = np.clip(bg_f[:, :, 0] * (1.08 * sh_w + 0.84 * hi_w) + 8 * sh_w, 0, 255)
+
+    # Smooth top micro-vignette (for top pill) + lush bottom dark stage (y=360..720 for ultra-crisp text & 'vues'!)
+    top_dark = np.clip(1.0 - (ys / 110.0), 0.0, 1.0) ** 1.5
+    bot_dark = np.clip((ys - 335.0) / 215.0, 0.0, 1.0) ** 1.25
+    wing_dark = np.clip((np.abs(xs - CX) - 245.0) / 260.0, 0.0, 1.0) ** 1.3
+    shade = np.clip(1.0 - 0.52 * top_dark - 0.88 * bot_dark - 0.34 * wing_dark, 0.07, 1.0)
+    canvas = graded * shade[:, :, None]
+
+    # Subtle channel rim backlight right behind the headline divider (y=380, x=640)
+    halo = np.exp(-(((xs - CX) / 210.0) ** 2 + ((ys - 375.0) / 145.0) ** 2))
+    if is_btc:
+        canvas[:, :, 2] = np.clip(canvas[:, :, 2] + halo * 46.0, 0, 255)
+        canvas[:, :, 1] = np.clip(canvas[:, :, 1] + halo * 12.0, 0, 255)
+    else:
+        canvas[:, :, 2] = np.clip(canvas[:, :, 2] + halo * 40.0, 0, 255)
+        canvas[:, :, 1] = np.clip(canvas[:, :, 1] + halo * 30.0, 0, 255)
+
+    # Subtle 35mm cinema grain
+    rng = np.random.default_rng(sum(ord(c) for c in f"{l1}{l3}") + 2026)
+    canvas = np.clip(canvas + rng.normal(0, 3.6, (H, W, 1)).astype(np.float32), 0, 255).astype(np.uint8)
+
+    im = Image.fromarray(cv2.cvtColor(canvas, cv2.COLOR_BGR2RGB)).convert("RGBA")
+    dr = ImageDraw.Draw(im)
+
+    # Top full-width brand bar (visible across 100% of Shorts & 16:9 width!)
+    accent_rgba = (226, 28, 34, 255) if is_btc else (246, 198, 62, 255)
+    dr.rectangle([0, 0, W, 8], fill=accent_rgba)
+
+    # 1) Top Centered Compact Eyebrow Pill (y=26..58, max width 250px -> 30px+ clear of top-right '...'!)
+    f_pill = load_font(FONT_MONO, 17, 700)
+    pill_txt = (f"DECLASSIFIED • {yr_tag}" if is_btc else f"UNSEALED • {yr_tag}")[:23]
+    pw_p = min(252, int(dr.textlength(pill_txt, font=f_pill)) + 26)
+    if is_btc:
+        dr.rounded_rectangle([CX - pw_p // 2, 26, CX + pw_p // 2, 58], radius=7, fill=(222, 26, 32, 248))
+        dr.text((CX, 42), pill_txt, font=f_pill, fill=(255, 252, 248, 255), anchor="mm")
+    else:
+        dr.rounded_rectangle([CX - pw_p // 2, 26, CX + pw_p // 2, 58], radius=7, fill=(14, 18, 28, 242), outline=(246, 198, 62, 245), width=2)
+        dr.text((CX, 42), pill_txt, font=f_pill, fill=(250, 208, 76, 255), anchor="mm")
+
+    # 2) Massive Centered Bone-White Hook Line(s) inside SAFE_W (352px)!
+    white_lines = [s for s in (l1, l2) if s]
+    # Keep shorts headline punchy: merge into 1 line if short, else 2 tight lines
+    if len(white_lines) == 2 and len(" ".join(white_lines)) <= 13:
+        white_lines = [" ".join(white_lines)]
+
+    y_cur = 378 if len(white_lines) == 2 else 412
+    for wl in white_lines:
+        fsz = 66 if len(white_lines) == 2 else 74
+        f_use = load_font(FONT_SANS, fsz, 800)
+        while fsz >= 36 and dr.textlength(wl, font=f_use) > SAFE_W:
+            fsz -= 2
+            f_use = load_font(FONT_SANS, fsz, 800)
+        _draw_soft_shadow_text(im, (CX, y_cur + fsz // 2), wl, f_use, (255, 253, 249, 255), anchor="mm", blur_r=9)
+        y_cur += int(fsz * 1.06)
+
+    # 3) Blazing Centered Power Climax Ribbon (Vermilion Red or Imperial Gold) strictly within SAFE_W!
+    hl_txt = (l3 or yr_tag).strip()
+    fsz_h = 68
+    f_hl = load_font(FONT_SANS, fsz_h, 800)
+    while fsz_h >= 34 and dr.textlength(hl_txt, font=f_hl) > SAFE_W - 34:
+        fsz_h -= 2
+        f_hl = load_font(FONT_SANS, fsz_h, 800)
+    dr = ImageDraw.Draw(im)
+    rw = min(SAFE_W, int(dr.textlength(hl_txt, font=f_hl)) + 38)
+    rh = int(fsz_h * 1.32)
+    ry = max(y_cur + 8, 466)
+    ry = min(ry, 566 - rh)
+
+    glow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    glow_col = (235, 32, 38, 125) if is_btc else (248, 200, 62, 120)
+    ImageDraw.Draw(glow).rounded_rectangle([CX - rw // 2 - 5, ry - 5, CX + rw // 2 + 5, ry + rh + 5], radius=12, fill=glow_col)
+    glow = glow.filter(ImageFilter.GaussianBlur(radius=14))
+    im.alpha_composite(glow)
+    dr = ImageDraw.Draw(im)
+    if is_btc:
+        dr.rounded_rectangle([CX - rw // 2, ry, CX + rw // 2, ry + rh], radius=9, fill=(224, 26, 32, 255))
+        dr.line([(CX - rw // 2 + 10, ry + 3), (CX + rw // 2 - 10, ry + 3)], fill=(255, 212, 92, 235), width=3)
+        dr.text((CX, ry + rh // 2), hl_txt, font=f_hl, fill=(255, 252, 248, 255), anchor="mm")
+    else:
+        dr.rounded_rectangle([CX - rw // 2, ry, CX + rw // 2, ry + rh], radius=9, fill=(248, 200, 58, 255))
+        dr.line([(CX - rw // 2 + 10, ry + 3), (CX + rw // 2 - 10, ry + 3)], fill=(255, 246, 204, 240), width=3)
+        dr.text((CX, ry + rh // 2), hl_txt, font=f_hl, fill=(14, 16, 22, 255), anchor="mm")
+
+    # 4) Compact Frosted Micro-Teaser Strip at y=580..612 (40px+ safely ABOVE YouTube's '107 vues' badge!)
+    f_ts = load_font(FONT_MONO, 16, 700)
+    while len(ts_lbl) > 12 and dr.textlength(ts_lbl, font=f_ts) > SAFE_W - 44:
+        ts_lbl = ts_lbl[:-1].rstrip()
+    ts_w = int(dr.textlength(ts_lbl, font=f_ts))
+    by_ts = min(604, ry + rh + 28)
+    box_tw = min(SAFE_W, ts_w + 38)
+    out_c = (255, 255, 255, 84) if is_btc else (246, 198, 62, 155)
+    dr.rounded_rectangle([CX - box_tw // 2, by_ts - 16, CX + box_tw // 2, by_ts + 16], radius=6, fill=(10, 12, 18, 230), outline=out_c, width=1)
+    dr.ellipse([CX - box_tw // 2 + 10, by_ts - 4, CX - box_tw // 2 + 18, by_ts + 4], fill=(248, 206, 68, 255))
+    dr.text((CX + 7, by_ts), ts_lbl, font=f_ts, fill=(244, 244, 248, 248), anchor="mm")
+
+    im.convert("RGB").save(out_jpg, "JPEG", quality=94, optimize=True)
+    style_lbl = "V21 SHORTS-BTC" if is_btc else "V21 SHORTS-HU"
+    print(f"[{style_lbl} 9:16-SAFE THUMB OK] {out_jpg} ({os.path.getsize(out_jpg)/1024:.1f} KB)")
     return out_jpg
 
 

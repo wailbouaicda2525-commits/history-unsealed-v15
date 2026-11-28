@@ -1,9 +1,11 @@
 """
 retrofit_thumbnails_v21.py — One-Shot V21 Unified Miniature Retrofit for ALL Existing YouTube Videos!
-Lists all uploaded videos on the authenticated channel (Long-Form + Shorts), fetches verified real
-zero-text archival photography for each video's exact historical subject, renders a crisp 1280x720
-V21 miniature using renderer_v20_cinema.generate_v20_thumbnail(), and updates every video's thumbnail
-live via YouTube Data API v3 (`thumbnails().set`).
+Smart dual-format engine:
+  - YouTube SHORTS (duration <= 180s or #Shorts) -> generate_v21_shorts_thumbnail()
+      1280x720 cinema canvas with ALL typography & focal subject 100% CENTER-SAFE inside the
+      9:16 (x=437..843) & 3:5 (x=424..856) Shorts grid crop + safely above 'vues' & below '...'!
+  - YouTube LONG-FORM (duration > 180s) -> generate_v20_thumbnail()
+      Full 16:9 1280x720 documentary layout (left typography + right archival hero)!
 """
 import os
 import re
@@ -14,17 +16,23 @@ import argparse
 import urllib.parse
 import urllib.request
 
-from renderer_v20_cinema import generate_v20_thumbnail, pick_best_thumb_photos
+from renderer_v20_cinema import (
+    generate_v20_thumbnail,
+    generate_v21_shorts_thumbnail,
+    pick_best_thumb_photos,
+)
 from uploader_v15 import get_youtube_service, send_telegram
 
 SSL_CTX = ssl.create_default_context()
 UA = "UnsealedArchivesPress/2.1 (https://github.com/wailbouaicda2525-commits; archival-documentary)"
 
-# Fact-checked, high-CTR miniature overrides for every existing video across CH1 & CH2
+# Fact-checked, deterministic hero-locked miniature overrides for all 18 videos across CH1 & CH2
 CURATED_VIDEO_SPECS = {
     # ===================== CH1: BEHIND THE CURTAIN =====================
     "slZHuN2oS1M": {
-        "wiki": ["Operation Paperclip", "Wernher von Braun"],
+        "is_short": True,
+        "wiki": ["Wernher von Braun", "Operation Paperclip"],
+        "prefer_lead": True,
         "white": "1,600 NAZIS",
         "red": "FOR NASA",
         "pill": "1945",
@@ -32,7 +40,9 @@ CURATED_VIDEO_SPECS = {
         "teaser": "OPERATION PAPERCLIP EXPOSED",
     },
     "UFASu1GdEXU": {
-        "wiki": ["June 1962 Alcatraz escape", "Alcatraz Federal Penitentiary"],
+        "is_short": True,
+        "wiki": ["Frank Morris (criminal)", "June 1962 Alcatraz escape"],
+        "prefer_lead": True,
         "white": "THEY ESCAPED",
         "red": "ALCATRAZ",
         "pill": "JUN 1962",
@@ -40,7 +50,9 @@ CURATED_VIDEO_SPECS = {
         "teaser": "DID THEY REALLY SURVIVE?",
     },
     "GVDungL64vA": {
-        "wiki": ["D. B. Cooper", "Boeing 727"],
+        "is_short": True,
+        "wiki": ["D. B. Cooper"],
+        "prefer_lead": True,
         "white": "HE JUMPED",
         "red": "WITH $200K",
         "pill": "NOV 1971",
@@ -48,7 +60,9 @@ CURATED_VIDEO_SPECS = {
         "teaser": "THE ONLY UNSOLVED SKYJACKING",
     },
     "kXm0hXh7UlQ": {
-        "wiki": ["1983 Soviet nuclear false alarm incident", "Stanislav Petrov"],
+        "is_short": True,
+        "wiki": ["Stanislav Petrov", "1983 Soviet nuclear false alarm incident"],
+        "prefer_lead": True,
         "white": "ONE MAN",
         "red": "STOPPED WW3",
         "pill": "SEP 1983",
@@ -56,6 +70,7 @@ CURATED_VIDEO_SPECS = {
         "teaser": "5 MINUTES TO NUCLEAR WAR",
     },
     "BEd7cVf__bk": {
+        "is_short": False,
         "wiki": ["Operation Gold", "Berlin Wall"],
         "white": "CIA TUNNEL",
         "red": "UNDER BERLIN",
@@ -64,7 +79,9 @@ CURATED_VIDEO_SPECS = {
         "teaser": "THE KGB KNEW ALL ALONG",
     },
     "ThjCOZuwY9Q": {
+        "is_short": True,
         "wiki": ["Checkpoint Charlie", "Operation Gold"],
+        "prefer_lead": True,
         "white": "SECRET SPY",
         "red": "TUNNEL",
         "pill": "1954–56",
@@ -72,6 +89,7 @@ CURATED_VIDEO_SPECS = {
         "teaser": "440,000 TAPPED SOVIET CALLS",
     },
     "38E1tY_YJuE": {
+        "is_short": False,
         "wiki": ["GSF Explorer", "Project Azorian"],
         "prefer_lead": True,
         "white": "THE CIA STOLE",
@@ -81,7 +99,9 @@ CURATED_VIDEO_SPECS = {
         "teaser": "THE $500M SECRET SALVAGE",
     },
     "DosLi1gUL24": {
-        "wiki": ["Soviet submarine K-129 (1960)", "Project Azorian"],
+        "is_short": True,
+        "wiki": ["Project Azorian", "GSF Explorer"],
+        "prefer_lead": True,
         "white": "THE $500M",
         "red": "FAKE SHIP",
         "pill": "1974",
@@ -89,6 +109,7 @@ CURATED_VIDEO_SPECS = {
         "teaser": "HOW THE CIA LIFTED K-129",
     },
     "3Vo8RHfifHc": {
+        "is_short": False,
         "wiki": ["Red Square", "Soviet Union"],
         "query": "Moscow street Soviet Union 1970s winter",
         "white": "DAILY LIFE IN",
@@ -99,7 +120,9 @@ CURATED_VIDEO_SPECS = {
     },
     # ===================== CH2: HISTORY UNSEALED =====================
     "NJxEgi5Fhwo": {
+        "is_short": True,
         "wiki": ["Tehran Conference"],
+        "prefer_lead": True,
         "white": "THE SECRET",
         "red": "SUMMIT",
         "pill": "NOV 1943",
@@ -107,6 +130,7 @@ CURATED_VIDEO_SPECS = {
         "teaser": "ROOSEVELT'S WWII GAMBLE",
     },
     "bU53ZBgVAsg": {
+        "is_short": True,
         "wiki": ["Lyndon B. Johnson"],
         "prefer_lead": True,
         "white": "THE SPEECH",
@@ -116,6 +140,7 @@ CURATED_VIDEO_SPECS = {
         "teaser": "5 DAYS AFTER DALLAS",
     },
     "X1F3kfpiSR0": {
+        "is_short": True,
         "wiki": ["Battle of Ia Drang", "Robert McNamara"],
         "prefer_lead": True,
         "white": "400,000",
@@ -125,15 +150,17 @@ CURATED_VIDEO_SPECS = {
         "teaser": "THE PENTAGON MEMO EXPOSED",
     },
     "wEZIR5kjd08": {
+        "is_short": True,
         "wiki": ["Bell UH-1 Iroquois", "Vietnam War"],
-        "query": "UH-1 Huey helicopter Vietnam rescue troops",
+        "prefer_lead": True,
         "white": "ONE PILOT",
         "red": "AGAINST ALL",
         "pill": "NOV 1968",
         "stamp": "VERIFIED",
-        "teaser": "THE IMPOSSIBLE RESCUE MISSION",
+        "teaser": "THE IMPOSSIBLE RESCUE",
     },
     "kNAYEIgYFxg": {
+        "is_short": False,
         "wiki": ["Apollo 11", "Buzz Aldrin"],
         "white": "12 SECONDS",
         "red": "FROM ABORT",
@@ -142,7 +169,9 @@ CURATED_VIDEO_SPECS = {
         "teaser": "THE 1202 ALARM ON APOLLO 11",
     },
     "cB4sljOHqo4": {
-        "wiki": ["Hull note", "Cordell Hull", "Attack on Pearl Harbor"],
+        "is_short": True,
+        "wiki": ["Cordell Hull", "Hull note"],
+        "prefer_lead": True,
         "white": "THE NOTE THAT",
         "red": "STARTED WAR",
         "pill": "NOV 1941",
@@ -150,6 +179,7 @@ CURATED_VIDEO_SPECS = {
         "teaser": "11 DAYS BEFORE PEARL HARBOR",
     },
     "YncrLOYQhDA": {
+        "is_short": False,
         "wiki": ["Attack on Pearl Harbor", "USS Arizona"],
         "prefer_lead": True,
         "white": "7:55 AM",
@@ -159,14 +189,17 @@ CURATED_VIDEO_SPECS = {
         "teaser": "MINUTE BY MINUTE DOCUMENTARY",
     },
     "4YLrH9wTdr0": {
-        "wiki": ["Iran–Contra affair", "Ronald Reagan", "Oliver North"],
+        "is_short": True,
+        "wiki": ["Iran–Contra affair", "Ronald Reagan"],
+        "prefer_lead": True,
         "white": "WHITE HOUSE",
         "red": "COVER-UP",
         "pill": "NOV 1986",
         "stamp": "UNSEALED",
-        "teaser": "INSIDE THE IRAN-CONTRA SCANDAL",
+        "teaser": "INSIDE IRAN-CONTRA SCANDAL",
     },
     "n3U2rHCqLts": {
+        "is_short": False,
         "wiki": ["RMS Titanic", "Sinking of the Titanic"],
         "prefer_lead": True,
         "white": "THE FATAL",
@@ -186,7 +219,6 @@ def _get_json(url, timeout=20):
 
 def _download_img(url, out_path):
     try:
-        # Strip Wikipedia tracking query string if present
         clean_u = url.split("?")[0] if "upload.wikimedia.org" in url else url
         req = urllib.request.Request(clean_u, headers={"User-Agent": UA})
         with urllib.request.urlopen(req, timeout=25, context=SSL_CTX) as r:
@@ -302,6 +334,14 @@ def fetch_archival_photos_for_video(vid_id, title, spec, work_dir):
     return saved
 
 
+def _parse_iso_duration_sec(iso_dur):
+    """Parse YouTube ISO-8601 duration (e.g. 'PT58S', 'PT1M12S', 'PT14M20S') into seconds."""
+    m = re.match(r"PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?", str(iso_dur or ""))
+    if not m:
+        return 0
+    return int(m.group(1) or 0) * 3600 + int(m.group(2) or 0) * 60 + int(m.group(3) or 0)
+
+
 def _auto_spec_from_title(title, is_btc):
     clean = re.sub(r"#shorts|\(19\d\d[^)]*\)|\(20\d\d[^)]*\)", "", title, flags=re.I).strip(" :–—-")
     m_yr = re.search(r"\b(1[5-9]\d{2}|20[0-2]\d)\b", title)
@@ -334,7 +374,7 @@ def list_all_channel_videos(yt):
     uploads_pl = items[0]["contentDetails"]["relatedPlaylists"]["uploads"]
     ch_title = items[0]["snippet"]["title"]
 
-    videos = []
+    raw_ids = []
     page_tok = None
     while True:
         res = yt.playlistItems().list(
@@ -344,12 +384,24 @@ def list_all_channel_videos(yt):
             pageToken=page_tok,
         ).execute()
         for it in res.get("items", []):
-            vid_id = it["contentDetails"]["videoId"]
-            title = it["snippet"]["title"]
-            videos.append((vid_id, title))
+            raw_ids.append((it["contentDetails"]["videoId"], it["snippet"]["title"]))
         page_tok = res.get("nextPageToken")
         if not page_tok:
             break
+
+    # Batch-fetch durations so we reliably separate Shorts (<=180s) from Long-Form (>180s)!
+    dur_map = {}
+    for i in range(0, len(raw_ids), 50):
+        batch = [v[0] for v in raw_ids[i:i + 50]]
+        vres = yt.videos().list(id=",".join(batch), part="contentDetails").execute()
+        for vit in vres.get("items", []):
+            dur_map[vit["id"]] = _parse_iso_duration_sec(vit["contentDetails"].get("duration"))
+
+    videos = []
+    for vid_id, title in raw_ids:
+        dur_s = dur_map.get(vid_id, 0)
+        is_short = (0 < dur_s <= 180) or ("#short" in title.lower())
+        videos.append((vid_id, title, is_short, dur_s))
     return ch_title, videos
 
 
@@ -361,36 +413,44 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dry-run", action="store_true", help="Render miniatures locally without calling YouTube API")
     ap.add_argument("--only-curated", action="store_true", help="Dry-run test curated videos for this channel")
+    ap.add_argument("--only-shorts", action="store_true", help="Update only Shorts videos")
     ap.add_argument("--only-id", default="", help="Optional: update only this exact YouTube video ID")
     ap.add_argument("--work-dir", default="/tmp/v21_retrofit")
     args = ap.parse_args()
 
     os.makedirs(args.work_dir, exist_ok=True)
     dry = args.dry_run or (os.environ.get("DRY_RUN", "false").lower() == "true")
+    only_shorts = args.only_shorts or (os.environ.get("ONLY_SHORTS", "false").lower() == "true")
     only_id = (args.only_id or os.environ.get("ONLY_VIDEO_ID", "")).strip()
 
     if dry and args.only_curated:
         ch1_ids = ["slZHuN2oS1M", "UFASu1GdEXU", "GVDungL64vA", "kXm0hXh7UlQ", "BEd7cVf__bk", "ThjCOZuwY9Q", "38E1tY_YJuE", "DosLi1gUL24", "3Vo8RHfifHc"]
-        ch2_ids = ["NJxEgi5Fhwo", "bU53ZBgVAsg", "X1F3kfpiSR0", "wEZIR5kjd08", "kNAYEIgYFxg", "cB4sljOHqo4", "YncrLOYQhDA", "4YLrH9wTdr0", "n3U2rHCqLts"]
-        vids = [(vid, CURATED_VIDEO_SPECS[vid]["teaser"]) for vid in (ch1_ids if is_btc else ch2_ids)]
+        ch2_ids = ["NJxEgi5Fhwo", "bU53ZBgVAsg", "X1F3kfpiSR0", "n3U2rHCqLts", "wEZIR5kjd08", "kNAYEIgYFxg", "cB4sljOHqo4", "YncrLOYQhDA", "4YLrH9wTdr0"]
+        vids = [(vid, CURATED_VIDEO_SPECS[vid]["teaser"], CURATED_VIDEO_SPECS[vid]["is_short"], 58 if CURATED_VIDEO_SPECS[vid]["is_short"] else 600)
+                for vid in (ch1_ids if is_btc else ch2_ids)]
         yt = None
     else:
         yt = get_youtube_service()
         ch_title, vids = list_all_channel_videos(yt)
-        if only_id:
-            vids = [(vid, t) for vid, t in vids if vid == only_id]
-        print(f"=== V21 MINIATURE RETROFIT: {brand} ({ch_title}) — {len(vids)} videos found ===")
+        print(f"=== V21 DUAL-SAFE MINIATURE RETROFIT: {brand} ({ch_title}) — {len(vids)} videos found ===")
+
+    if only_id:
+        vids = [v for v in vids if v[0] == only_id]
+    if only_shorts:
+        vids = [v for v in vids if v[2]]
 
     MediaFileUpload = None
     if not dry:
         from googleapiclient.http import MediaFileUpload
 
     ok_count, skip_count, err_count = 0, 0, 0
-    for idx, (vid_id, title) in enumerate(vids, 1):
+    for idx, (vid_id, title, is_short, dur_s) in enumerate(vids, 1):
         spec = CURATED_VIDEO_SPECS.get(vid_id) or _auto_spec_from_title(title, is_btc)
+        if "is_short" in spec:
+            is_short = spec["is_short"]
         photos = fetch_archival_photos_for_video(vid_id, title, spec, args.work_dir)
         if not photos:
-            print(f"  ⚠️ [{idx}/{len(vids)}] No clean archival photo found for {vid_id} ({title[:40]}), skipping.")
+            print(f"  ⚠️ [{idx}/{len(vids)}] No clean archival photo found for {vid_id}, skipping.")
             skip_count += 1
             continue
         if spec.get("prefer_lead") and photos:
@@ -399,14 +459,22 @@ def main():
         else:
             hero, second = pick_best_thumb_photos(photos)
         out_jpg = os.path.join(args.work_dir, f"thumb_{vid_id}.jpg")
-        generate_v20_thumbnail(
-            hero, second, brand,
-            spec["white"], spec["red"], spec["stamp"], out_jpg,
-            center_pill=spec["pill"], teaser=spec["teaser"],
-        )
+        fmt_lbl = "SHORT 9:16-SAFE" if is_short else "LONG 16:9"
+        if is_short:
+            generate_v21_shorts_thumbnail(
+                hero, second, brand,
+                spec["white"], spec["red"], spec["stamp"], out_jpg,
+                center_pill=spec["pill"], teaser=spec["teaser"],
+            )
+        else:
+            generate_v20_thumbnail(
+                hero, second, brand,
+                spec["white"], spec["red"], spec["stamp"], out_jpg,
+                center_pill=spec["pill"], teaser=spec["teaser"],
+            )
 
         if dry:
-            print(f"  [{idx}/{len(vids)}] DRY-RUN OK: {vid_id} -> {spec['white']} / {spec['red']} ({len(photos)} photos, best={os.path.basename(hero)})")
+            print(f"  [{idx}/{len(vids)}] DRY-RUN [{fmt_lbl}]: {vid_id} -> {spec['white']} / {spec['red']} (hero={os.path.basename(hero)})")
             ok_count += 1
             continue
 
@@ -415,13 +483,13 @@ def main():
                 videoId=vid_id,
                 media_body=MediaFileUpload(out_jpg, mimetype="image/jpeg"),
             ).execute()
-            print(f"  ✅ [{idx}/{len(vids)}] UPDATED LIVE: {vid_id} | {title[:55]}")
+            print(f"  ✅ [{idx}/{len(vids)}] UPDATED LIVE [{fmt_lbl}]: {vid_id} | {title[:52]}")
             ok_count += 1
             time.sleep(0.8)
         except Exception as e:
             emsg = str(e)
             if "forbidden" in emsg.lower() or "403" in emsg or "shorts" in emsg.lower():
-                print(f"  ⚠️ [{idx}/{len(vids)}] SKIPPED (YT Shorts/Verify restriction): {vid_id} -> {emsg[:120]}")
+                print(f"  ⚠️ [{idx}/{len(vids)}] SKIPPED: {vid_id} -> {emsg[:120]}")
                 skip_count += 1
             else:
                 print(f"  ❌ [{idx}/{len(vids)}] ERROR: {vid_id} -> {emsg[:140]}")
@@ -430,7 +498,7 @@ def main():
     print(f"\n=== RETROFIT SUMMARY ({brand}) === Updated={ok_count} | Skipped={skip_count} | Errors={err_count}")
     if not dry:
         send_telegram(
-            f"🎨🔥 <b>{brand} — V21 MINIATURE RETROFIT COMPLETE!</b>\n"
+            f"🎨🔥 <b>{brand} — V21 SHORTS 9:16-SAFE + LONG 16:9 RETROFIT LIVE!</b>\n"
             f"✅ Updated Live: <b>{ok_count}</b> / {len(vids)} videos\n"
             f"⚠️ Skipped: {skip_count} | ❌ Errors: {err_count}"
         )

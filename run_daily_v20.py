@@ -15,7 +15,7 @@ from scout_v15 import scout_event
 from scriptwriter_v20 import write_script_v20
 from video_scout_v20 import scout_real_videos_v20
 from voice_engine_v15 import synthesize_voice_v15, mix_cinema_audio_v15
-from renderer_v20_cinema import render_v20_cinema, pick_best_thumb_photos, generate_v20_thumbnail
+from renderer_v20_cinema import render_v20_cinema, pick_best_thumb_photos, generate_v21_shorts_thumbnail
 from uploader_v15 import upload_video_to_youtube, send_telegram
 
 
@@ -88,11 +88,11 @@ def main():
         show_outro=True, show_midroll_ad=True,
     )
 
-    # 🔥 V21: Generate high-CTR 1280x720 Viral Miniature for Desktop/Channel/Search Shorts display!
+    # 🔥 V21: Generate 9:16 & 3:5 CENTER-SAFE Shorts Viral Miniature (never cropped on Shorts tab + full 16:9!)
     t_hero, t_sec = pick_best_thumb_photos(ev.get("images", []))
     short_thumb = os.path.join(work_dir, "short_v21_thumb_1280x720.jpg")
     if t_hero:
-        generate_v20_thumbnail(
+        generate_v21_shorts_thumbnail(
             t_hero, t_sec, cfg["channel_name"],
             script.get("thumb_white", script["hook_top"]),
             script.get("thumb_red", str(ev["year"])),
